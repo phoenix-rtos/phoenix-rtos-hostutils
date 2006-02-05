@@ -40,7 +40,7 @@ int serial_open(char *dev, uint speed)
 {
 	int fd;
 	struct termios newtio;
-
+	
 	if ((fd = open(dev, O_RDWR | O_EXCL | O_SYNC)) < 0)
 		return ERR_SERIAL_INIT;
 
@@ -54,11 +54,12 @@ int serial_open(char *dev, uint speed)
 	cfsetispeed(&newtio, speed);
 	cfsetospeed(&newtio, speed);
 	
-	if (tcflush(fd, TCIFLUSH) < 0)
+	if (tcflush(fd, TCIOFLUSH) < 0)
 		return ERR_SERIAL_IO;
+
 	if (tcsetattr(fd, TCSANOW, &newtio) < 0)
 		return ERR_SERIAL_SETATTR;
-		
+
 	return fd;
 }
 
