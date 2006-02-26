@@ -93,7 +93,6 @@ int msg_recv(int fd, msg_t *msg, int *state)
 	for (;;) {
 		if (serial_read(fd, &c, 1, 0) < 0) {
 			*state = MSGRECV_DESYN;
-printf("timeout\n");
 			return ERR_MSG_IO;
 		}
 			
@@ -102,13 +101,11 @@ printf("timeout\n");
 			/* Return error if frame is to long */
 			if (l == MSG_HDRSZ + MSG_MAXLEN) {
 				*state = MSGRECV_DESYN;
-printf("frame to long\n");
 				return ERR_MSG_IO;
 			}
 				
 			/* Return error if terminator discovered */
 			if (c == MSG_MARK) {
-printf("terminator discovered\n");
 				return ERR_MSG_IO;
 			}
 			
@@ -140,7 +137,6 @@ printf("terminator discovered\n");
 	
 	/* Verify received message */
 	if (msg->csum != msg_csum(msg)) {
-printf("checksum\n");
 		return ERR_MSG_IO;
 	}
 

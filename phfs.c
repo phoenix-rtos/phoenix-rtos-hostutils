@@ -29,6 +29,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/resource.h>
 
 #include "errors.h"
 #include "msg.h"
@@ -37,11 +39,8 @@
 
 int phfs_open(int fd, msg_t *msg, char *sysdir)
 {
-	char *path = &msg->data[sizeof(u32)];
-	int flags = *(u32 *)msg->data;
-	int f = 0;
-	char *realpath;
-	int ofd;
+	char *path = &msg->data[sizeof(u32)], *realpath;
+	int flags = *(u32 *)msg->data, f = 0, ofd;
 	
 	msg->data[MSG_MAXLEN] = 0;
 		
@@ -54,9 +53,10 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 	else {
 		sprintf(realpath, "%s/%s", sysdir, path);
 		ofd = open(realpath, f);	
+
 		printf("[%d] phfs: MSG_OPEN %s [%s] ofs=%d\n", getpid(), path, realpath, ofd);
 		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
-		free(realpath);
+		free(realpath);		
 	}
 	
 	if (msg_send(fd, msg) < 0)
@@ -133,6 +133,27 @@ int phfs_close(int fd, msg_t *msg, char *sysdir)
 }
 
 
+int phfs_reset(int fd, msg_t *msg, char *sysdir)
+{
+	int i;
+	struct rlimit rlim;
+	
+	printf("[%d] phfs: MSG_RESET\n", getpid());
+	getrlimit(RLIMIT_NOFILE, &rlim);	
+	for (i = 3; i < rlim.rlim_cur; i++) {
+		if (i != fd)
+			close(i);
+	}
+
+	msg_settype(msg, MSG_RESET);
+	msg_setlen(msg, 0);
+	
+	if (msg_send(fd, msg) < 0)
+		return ERR_PHFS_IO;
+	return 1;
+}
+
+
 int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
 {
 	int res = 0;
@@ -149,6 +170,9 @@ int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
 		break;
 	case MSG_CLOSE:
 		res = phfs_close(fd, msg, sysdir);
+		break;
+	case MSG_RESET:
+		res = phfs_reset(fd, msg, sysdir);
 		break;
 	}
 	return res;

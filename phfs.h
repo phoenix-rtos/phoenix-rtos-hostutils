@@ -32,8 +32,9 @@
 #define MSG_READ   2
 #define MSG_WRITE  3
 #define MSG_CLOSE  4
+#define MSG_RESET  5
 
-
+/* Opening flags */
 #define PHFS_RDONLY  0
 #define PHFS_RDWR    1
 
