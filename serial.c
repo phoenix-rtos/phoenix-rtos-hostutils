@@ -54,10 +54,10 @@ int serial_open(char *dev, uint speed)
 	cfsetispeed(&newtio, speed);
 	cfsetospeed(&newtio, speed);
 	
-	if (tcflush(fd, TCIOFLUSH) < 0)
+	if (tcflush(fd, TCIFLUSH) < 0)
 		return ERR_SERIAL_IO;
 
-	if (tcsetattr(fd, TCSANOW, &newtio) < 0)
+	if (tcsetattr(fd, TCSAFLUSH, &newtio) < 0)
 		return ERR_SERIAL_SETATTR;
 
 	return fd;

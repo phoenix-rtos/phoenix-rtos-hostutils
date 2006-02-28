@@ -54,7 +54,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 		sprintf(realpath, "%s/%s", sysdir, path);
 		ofd = open(realpath, f);	
 
-		printf("[%d] phfs: MSG_OPEN %s [%s] ofs=%d\n", getpid(), path, realpath, ofd);
+		printf("[%d] phfs: MSG_OPEN path='%s', realpath='%s', ofd=%d\n", getpid(), path, realpath, ofd);
 		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
 		free(realpath);		
 	}
@@ -71,14 +71,13 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 	u32 hdrsz;
 	u32 l;
 
-	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);
-	
+	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);	
 	if (io->len > MSG_MAXLEN - hdrsz)
 		io->len = MSG_MAXLEN - hdrsz;
-	
+
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = read(io->handle, io->buff, io->len);
-	
+		
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
 	
@@ -105,7 +104,7 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 	
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = write(io->handle, io->buff, io->len);
-	
+		
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
 	
@@ -122,7 +121,8 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 int phfs_close(int fd, msg_t *msg, char *sysdir)
 {
 	int ofd = *(int *)msg->data;
-	
+
+	printf("[%d] phfs: MSG_CLOSE ofd=%d\n", getpid(), ofd);
 	close(ofd);
 	msg_settype(msg, MSG_CLOSE);
 	msg_setlen(msg, 0);
