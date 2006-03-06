@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/resource.h>
 
 #include "errors.h"
@@ -44,7 +45,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 	
 	msg->data[MSG_MAXLEN] = 0;
 		
-	f =  flags == PHFS_RDONLY ? O_RDONLY : O_RDWR;
+	f =  (flags == PHFS_RDONLY) ? O_RDONLY : (O_RDWR | O_CREAT | O_TRUNC);
 	msg_settype(msg, MSG_OPEN);
 	msg_setlen(msg, sizeof(int));
 	
@@ -52,7 +53,11 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 		*(u32 *)msg->data = 0;
 	else {
 		sprintf(realpath, "%s/%s", sysdir, path);
-		ofd = open(realpath, f);	
+		
+		if (flags == PHFS_RDONLY)
+			ofd = open(realpath, f);
+		else
+			ofd = open(realpath, f, S_IRUSR | S_IWUSR);
 
 		printf("[%d] phfs: MSG_OPEN path='%s', realpath='%s', ofd=%d\n", getpid(), path, realpath, ofd);
 		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
@@ -94,8 +99,7 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 int phfs_write(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
-	u32 hdrsz;
-	u32 l;
+	u32 hdrsz, l;
 	
 	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);
 	
@@ -108,7 +112,7 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
 	
-	msg_settype(msg, MSG_READ);
+	msg_settype(msg, MSG_WRITE);
 	msg_setlen(msg, l + hdrsz);
 	
 	if (msg_send(fd, msg) < 0)
