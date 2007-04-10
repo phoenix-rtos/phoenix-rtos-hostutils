@@ -106,17 +106,15 @@ int serial_write(int fd, u8 *buff, uint len)
 	int l;
 
 	for (;;) {
-		if ((l = write(fd, buff, len)) < 0)
+		if ((l = write(fd, buff, len)) < 0) {
 			return ERR_SERIAL_IO;
+		}
 		
-
 		buff += l;
 		len -= l;
 		if (!len)
 			break;
 	}
-	if (fsync(fd) < 0)
-		return ERR_SERIAL_IO;
-	
+
 	return len;
 }

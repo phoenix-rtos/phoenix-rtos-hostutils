@@ -89,7 +89,7 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 	msg_settype(msg, MSG_READ);
 	msg_setlen(msg, l + hdrsz);
 
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg)) < 0)
 		return ERR_PHFS_IO;
 
 	return 1;

@@ -39,7 +39,7 @@ int dispatch(char *dev, unsigned int speed, char *sysdir)
 {
 	int fd;
 	msg_t msg;
-	int state;
+	int state, err;
 	
 	printf("[%d] dispatch: Starting message dispatcher on %s\n", getpid(), dev);
 			
@@ -54,9 +54,9 @@ int dispatch(char *dev, unsigned int speed, char *sysdir)
 			continue;
 		}
 		
-		if (phfs_handlemsg(fd, &msg, sysdir))
+		if (err = phfs_handlemsg(fd, &msg, sysdir))
 			continue;
-		
+
 		switch (msg_gettype(&msg)) {
 		case MSG_ERR:
 			msg_settype(&msg, MSG_ERR);
