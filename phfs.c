@@ -40,7 +40,7 @@
 
 int phfs_open(int fd, msg_t *msg, char *sysdir)
 {
-	char *path = &msg->data[sizeof(u32)], *realpath;
+	char *path = (char *)&msg->data[sizeof(u32)], *realpath;
 	int flags = *(u32 *)msg->data, f = 0, ofd;
 	
 	msg->data[MSG_MAXLEN] = 0;
@@ -89,7 +89,7 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 	msg_settype(msg, MSG_READ);
 	msg_setlen(msg, l + hdrsz);
 
-	if (msg_send(fd, msg)) < 0)
+	if (msg_send(fd, msg) < 0)
 		return ERR_PHFS_IO;
 
 	return 1;
@@ -156,6 +156,58 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 		return ERR_PHFS_IO;
 	return 1;
 }
+
+
+#if 0
+int phfs_lookup(int fd, msg_t *msg, char *sysdir)
+{
+	char *name; ;
+	int flags = *(u32 *)msg->data, f = 0, ofd;
+	
+	msg->data[MSG_MAXLEN] = 0;
+	
+	name = &msg->data[sizeof(u32)];
+	
+	msg_settype(msg, MSG_LOOKUP);
+	msg_setlen(msg, sizeof(int));
+
+	if ((entry = cache_find(id)) == NULL) {
+		vnode = vnode_get(id);
+		if (id == 0)
+			vnode->path = sysdir;
+			vnode->type = vnodeDir;
+		}
+
+	if (!entry) {
+		vnode_get(id);
+		vnode->type = vnodeDir;
+		vnode->path = 
+	
+if (entry->type != vnodeDir)
+		err = ERR_ARG;
+	
+	if (file->
+
+	if ((realpath = malloc(strlen(sysdir) + 1 + strlen(path) + 1)) == NULL)
+		*(u32 *)msg->data = 0;
+	else {
+		sprintf(realpath, "%s/%s", sysdir, path);
+		
+		if (flags == PHFS_RDONLY)
+			ofd = open(realpath, f);
+		else
+			ofd = open(realpath, f, S_IRUSR | S_IWUSR);
+
+		printf("[%d] phfs: MSG_OPEN path='%s', realpath='%s', ofd=%d\n", getpid(), path, realpath, ofd);
+		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
+		free(realpath);		
+	}
+	
+	if (msg_send(fd, msg) < 0)
+		return ERR_PHFS_IO;
+	return 1;
+}
+#endif
 
 
 int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
