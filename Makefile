@@ -5,7 +5,7 @@
 
 CC = gcc
 LD = gcc
-CFLAGS = -c -Wall -I . -O2
+CFLAGS = -c -Wall -I . -O2 -g
 LDFLAGS = -lm
 
 SRCS = serial.c bsp.c dispatch.c msg.c phfs.c phoenixd.c
