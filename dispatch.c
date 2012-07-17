@@ -24,6 +24,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -46,11 +47,26 @@ static char *concat(char *s1, char *s2)
 
 }
 
+static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, int *fd_out) 
+{
+		if ((*fd_in = open(dev_in, O_RDONLY)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);	
+			return ERR_DISPATCH_IO;
+		}
+
+		if ((*fd_out = open(dev_out, O_WRONLY)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);		
+			return ERR_DISPATCH_IO;
+		}
+	return 0;
+}
+
 /* Function reads and dispatches messages */
 int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
 {
 	int fd = -1;
 	int fd_out = -1;
+	int retries = 128;
 	msg_t msg;
 	int state, err;
 	char *dev_in = 0; 
@@ -66,27 +82,21 @@ int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
 		dev_in = concat(dev, ".out"); // because output from quemu is our input
 		dev_out = concat(dev, ".in"); // same logic
 
-		if ((fd = open(dev_in, O_RDONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);	
+		if (connect_pipes(dev_in, dev_out, &fd, &fd_out)) { 
 			free(dev_in);
 			free(dev_out);
 			return ERR_DISPATCH_IO;
 		}
-
-		if ((fd_out = open(dev_out, O_WRONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);		
-			free(dev_in);
-			free(dev_out);
-			return ERR_DISPATCH_IO;
-		}
-
-		free(dev_in);
-		free(dev_out);
 	}
 
 	for (state = MSGRECV_DESYN;;) {
 		if (msg_recv(fd, &msg, &state) < 0) {
 			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev, state);
+			// if this is pipe - try to reconnect - it's because qemu closes pipe 
+			if (is_pipe && --retries) {
+				usleep(10000);
+				(void) connect_pipes(dev_in, dev_out, &fd, &fd_out);
+			}
 			continue;
 		}
 		
@@ -102,5 +112,11 @@ int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
 		}
 			
 	}
+	
+	if (is_pipe) {
+		free(dev_in);
+		free(dev_out);
+	}
+	
 	return 0;
 }
