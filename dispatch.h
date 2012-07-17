@@ -29,7 +29,7 @@
 
 
 /* Function reads and dispatches messages */
-extern int dispatch(char *dev, unsigned int speed, char *sysdir);
+extern int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir);
 
 
 #endif

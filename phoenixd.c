@@ -95,13 +95,14 @@ int main(int argc, char *argv[])
 	char *kernel = "../kernel/phoenix";
 	char *sysdir = "../sys";
 	char *ttys[8];
+	int is_pipe[8] = {0};
 	int k, i = 0;
 	int res, st;
 	
 	printf("-\\- Phoenix server, ver. " VERSION ", (c) Pawel Pisarczyk, 2000, 2005\n");
 	
 	while (1) {	
-		c = getopt(argc, argv, "k:p:s:1");
+		c = getopt(argc, argv, "k:p:s:1m:1");
 		if (c < 0)
 			break; 				
 		
@@ -116,11 +117,16 @@ int main(int argc, char *argv[])
 			bspfl = 1;
 			break;
 	
+		case 'm':
+			if (i < 8) {
+				is_pipe[i] = 1;
+			}
 		case 'p':
 			if (i == 8) {
 				fprintf(stderr, "To many ttys for open!\n");
 				return ERR_ARG;
 			}
+
 			if ((ttys[i] = (char *)malloc(strlen(optarg) + 1)) == NULL)
 				return ERR_MEM;
 			strcpy(ttys[i++], optarg);
@@ -133,7 +139,7 @@ int main(int argc, char *argv[])
 		
 	if (!i) {
 		fprintf(stderr, "You have to specify at least one serial devcie\n");
-		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] -p serial_device [ [-p serial_device] ... ]\n");
+		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] -p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]\n");
 		return -1;
 	}
 		
@@ -143,7 +149,7 @@ int main(int argc, char *argv[])
 			if (bspfl)
 				res = phoenixd_session(ttys[k], kernel, sysdir);
 			else
-				res = dispatch(ttys[k], B115200, sysdir);
+				res = dispatch(ttys[k], is_pipe[k], B115200, sysdir);
 			
 			return res;
 		}	

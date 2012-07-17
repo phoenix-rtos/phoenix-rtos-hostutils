@@ -25,7 +25,10 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "errors.h"
 #include "serial.h"
@@ -34,18 +37,51 @@
 #include "phfs.h"
 
 
-/* Function reads and dispatches messages */
-int dispatch(char *dev, unsigned int speed, char *sysdir)
+static char *concat(char *s1, char *s2)
 {
-	int fd;
+	char *result = malloc(strlen(s1) + strlen(s2) + 1);
+	strcpy(result, s1);
+	strcat(result, s2);
+	return result;
+
+}
+
+/* Function reads and dispatches messages */
+int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
+{
+	int fd = -1;
+	int fd_out = -1;
 	msg_t msg;
 	int state, err;
+	char *dev_in = 0; 
+	char *dev_out = 0;
 	
 	printf("[%d] dispatch: Starting message dispatcher on %s\n", getpid(), dev);
-			
-	if ((fd = serial_open(dev, speed)) < 0) {
-		fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev);		
-		return ERR_DISPATCH_IO;
+	if (!is_pipe){
+		if ((fd = serial_open(dev, speed)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev);		
+			return ERR_DISPATCH_IO;
+		}
+	} else {
+		dev_in = concat(dev, ".out"); // because output from quemu is our input
+		dev_out = concat(dev, ".in"); // same logic
+
+		if ((fd = open(dev_in, O_RDONLY)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);	
+			free(dev_in);
+			free(dev_out);
+			return ERR_DISPATCH_IO;
+		}
+
+		if ((fd_out = open(dev_out, O_WRONLY)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);		
+			free(dev_in);
+			free(dev_out);
+			return ERR_DISPATCH_IO;
+		}
+
+		free(dev_in);
+		free(dev_out);
 	}
 
 	for (state = MSGRECV_DESYN;;) {
@@ -54,14 +90,14 @@ int dispatch(char *dev, unsigned int speed, char *sysdir)
 			continue;
 		}
 		
-		if (err = phfs_handlemsg(fd, &msg, sysdir))
+		if (err = phfs_handlemsg((is_pipe ? fd_out : fd), &msg, sysdir))
 			continue;
 
 		switch (msg_gettype(&msg)) {
 		case MSG_ERR:
 			msg_settype(&msg, MSG_ERR);
 			msg_setlen(&msg, MSG_MAXLEN);
-			msg_send(fd, &msg);
+			msg_send((is_pipe ? fd_out : fd), &msg);
 			break;
 		}
 			
