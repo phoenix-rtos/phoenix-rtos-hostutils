@@ -88,10 +88,13 @@ int serial_read(int fd, u8 *buff, uint len, uint timeout)
 		if (!res)
 			return ERR_SERIAL_TIMEOUT;
 
-		if ((res = read(fd, &c, 1)) < 0)
+		if ((res = read(fd, &c, 1)) < 0) {
 			return ERR_SERIAL_IO;
-		else if (!res)
+		} else if (res == 0) { // if select returned readiness but we got read size zero - we got closed conn
+			return ERR_SERIAL_CLOSED;
+		} else if (!res) {
 			continue;
+		}
 
 		buff[p++] = c;
 		if (p == len)

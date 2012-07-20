@@ -47,6 +47,7 @@
 #define ERR_SERIAL_SETATTR  -66
 #define ERR_SERIAL_IO       -67
 #define ERR_SERIAL_TIMEOUT  -68
+#define ERR_SERIAL_CLOSED   -69
 
 #define ERR_PHFS_IO  -80
 
