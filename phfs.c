@@ -129,7 +129,7 @@ int phfs_close(int fd, msg_t *msg, char *sysdir)
 	printf("[%d] phfs: MSG_CLOSE ofd=%d\n", getpid(), ofd);
 	close(ofd);
 	msg_settype(msg, MSG_CLOSE);
-	msg_setlen(msg, 0);
+	msg_setlen(msg, sizeof(int));
 	
 	if (msg_send(fd, msg) < 0)
 		return ERR_PHFS_IO;
