@@ -44,8 +44,8 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 	int flags = *(u32 *)msg->data, f = 0, ofd;
 	
 	msg->data[MSG_MAXLEN] = 0;
-		
-	f =  (flags == PHFS_RDONLY) ? O_RDONLY : (O_RDWR | O_CREAT | O_APPEND);
+
+	f =  (flags == PHFS_RDONLY) ? O_RDONLY : (O_RDWR | O_CREAT);
 	msg_settype(msg, MSG_OPEN);
 	msg_setlen(msg, sizeof(int));
 	
@@ -105,10 +105,10 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 	
 	if (io->len > MSG_MAXLEN - hdrsz)
 		io->len = MSG_MAXLEN - hdrsz;
-	
+
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = write(io->handle, io->buff, io->len);
-		
+
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
 	
@@ -156,7 +156,51 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 		return ERR_PHFS_IO;
 	return 1;
 }
+phfs_stat(int fd, msg_t *msg, char *sysdir)
+{
+	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
+	u32 hdrsz;
+	u32 l;
+	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);
+	if (io->len > MSG_MAXLEN - hdrsz)
+		io->len = MSG_MAXLEN - hdrsz;
 
+	int *tmp_fd = (u32 *)msg->data;
+	struct pho_stat stat_send, test;
+	struct stat st;
+
+	fstat(io->handle,&st);
+
+	stat_send.st_dev=st.st_dev;
+	stat_send.st_ino=st.st_ino;
+	stat_send.st_mode=st.st_mode;
+	stat_send.st_nlink=st.st_nlink;
+	stat_send.st_uid=st.st_uid;
+	stat_send.st_gid=st.st_gid;
+	stat_send.st_rdev=st.st_rdev;
+	stat_send.st_size=st.st_size;
+
+	stat_send.st_atime_=st.st_atime;
+	stat_send.st_mtime_=st.st_mtime;
+	stat_send.st_ctime_=st.st_ctime;
+	stat_send.st_blksize=st.st_blksize;
+	stat_send.st_blocks=st.st_blocks;
+
+	memcpy(io->buff,&stat_send,sizeof(stat_send));
+	memcpy(&test, io->buff,sizeof(stat_send));
+	io->pos=0;
+	l = sizeof(stat_send);
+	msg->data[MSG_MAXLEN] = 0;
+	io->len=l;
+	msg_settype(msg, MSG_FSTAT);
+	msg_setlen(msg, l+hdrsz);
+
+	printf("[%d] phfs: MSG_STAT id:%d  \n", getpid(),io->handle);
+
+	if (msg_send(fd, msg) < 0)
+		return ERR_PHFS_IO;
+	return 1;
+}
 
 #if 0
 int phfs_lookup(int fd, msg_t *msg, char *sysdir)
@@ -229,6 +273,9 @@ int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
 		break;
 	case MSG_RESET:
 		res = phfs_reset(fd, msg, sysdir);
+		break;
+	case MSG_FSTAT:
+		res = phfs_stat(fd, msg, sysdir);
 		break;
 	}
 	return res;
