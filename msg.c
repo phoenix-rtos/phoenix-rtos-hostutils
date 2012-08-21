@@ -58,7 +58,7 @@ int msg_send(int fd, msg_t *msg)
 	msg->csum = msg_csum(msg);
 	cs[0] = MSG_MARK;
 	
-	if (msg_getlen(msg) >= MSG_MAXLEN)
+	if (msg_getlen(msg) > MSG_MAXLEN)
 		return ERR_MSG_ARG;
 
 	buff[i++] = cs[0];
