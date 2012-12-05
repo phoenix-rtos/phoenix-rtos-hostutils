@@ -4,22 +4,13 @@
  * Phoenix server
  *
  * Copyright 2001, 2004 Pawel Pisarczyk
+ * Copyright 2012 Phoenix Systems
+ *
+ * Author: Pawel Pisarczyk, Jacek Popko
  *
  * This file is part of Phoenix-RTOS.
  *
- * Phoenix-RTOS is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * Phoenix-RTOS kernel is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Phoenix-RTOS kernel; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * %LICENSE%
  */
 
 #include <stdio.h>
@@ -28,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <stdlib.h>
 
 #include "types.h"
 #include "errors.h"
@@ -40,7 +32,7 @@ extern char *optarg;
 
 
 #define VERSION "1.2"
-
+#define PHFS_PORT 11520
 
 int phoenixd_session(char *tty, char *kernel, char *sysdir)
 {
@@ -95,14 +87,14 @@ int main(int argc, char *argv[])
 	char *kernel = "../kernel/phoenix";
 	char *sysdir = "../sys";
 	char *ttys[8];
-	int is_pipe[8] = {0};
+	mode_t mode[8] = {SERIAL};
 	int k, i = 0;
 	int res, st;
 	
-	printf("-\\- Phoenix server, ver. " VERSION ", (c) Pawel Pisarczyk, 2000, 2005\n");
+	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 	
 	while (1) {	
-		c = getopt(argc, argv, "k:p:s:1m:1");
+		c = getopt(argc, argv, "k:p:s:1m:i:");
 		if (c < 0)
 			break; 				
 		
@@ -119,17 +111,24 @@ int main(int argc, char *argv[])
 	
 		case 'm':
 			if (i < 8) {
-				is_pipe[i] = 1;
+				mode[i] = PIPE;
 			}
 		case 'p':
 			if (i == 8) {
-				fprintf(stderr, "To many ttys for open!\n");
+				fprintf(stderr, "Too many ttys for open!\n");
 				return ERR_ARG;
 			}
 
-			if ((ttys[i] = (char *)malloc(strlen(optarg) + 1)) == NULL)
-				return ERR_MEM;
-			strcpy(ttys[i++], optarg);
+			ttys[i++] = optarg;
+			break;
+
+		case 'i':
+			if (i >= 8) {
+				fprintf(stderr, "Too many instances (-i %s)\n", optarg);
+				break;
+			}
+			mode[i] = UDP;
+			ttys[i++] = optarg;
 			break;
 
 		default:
@@ -138,19 +137,37 @@ int main(int argc, char *argv[])
 	}
 		
 	if (!i) {
-		fprintf(stderr, "You have to specify at least one serial devcie\n");
-		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] -p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]\n");
+		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n");
+		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
+				"-p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]"
+				"-i ip_addr:port [ [-i ip_addr:port] ... ]\n");
 		return -1;
 	}
-		
 	for (k = 0; k < i; k++)
 		if (!fork()) {
 		
 			if (bspfl)
 				res = phoenixd_session(ttys[k], kernel, sysdir);
-			else
-				res = dispatch(ttys[k], is_pipe[k], B115200, sysdir);
-			
+			else {
+				unsigned speed_port = 0;
+
+				if (mode[k] == UDP)	{
+					char *port;
+
+					if ((port = strchr(ttys[k], ':')) != NULL)
+					{
+						*port++ = '\0';
+						sscanf(port, "%u", &speed_port);
+					}
+
+					if (speed_port == 0 || speed_port > 0xffff)
+						speed_port = PHFS_PORT;
+				}
+				else
+					speed_port = B115200;
+
+				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
+			}
 			return res;
 		}	
 

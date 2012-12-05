@@ -9,19 +9,7 @@
  *
  * This file is part of Phoenix-RTOS.
  *
- * Phoenix-RTOS is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * Phoenix-RTOS kernel is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Phoenix-RTOS kernel; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * %LICENSE%
  */
 
 #include <stdio.h>
@@ -34,6 +22,7 @@
 #include <sys/resource.h>
 
 #include "errors.h"
+#include "dispatch.h"
 #include "msg.h"
 #include "phfs.h"
 
@@ -74,18 +63,23 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
 	u32 hdrsz;
-	u32 l;
+	u32 l, pos, len;
 
 	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);	
 	if (io->len > MSG_MAXLEN - hdrsz)
 		io->len = MSG_MAXLEN - hdrsz;
 
+	len = io->len;
+	pos = io->pos;
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = read(io->handle, io->buff, io->len);
 		
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
-	
+
+	printf("[%d] phfs: MSG_READ ofd=%d, pos=%d, len=%d, ret=%d\n",
+		getpid(), io->handle, pos, len, io->len);
+
 	msg_settype(msg, MSG_READ);
 	msg_setlen(msg, l + hdrsz);
 
@@ -156,7 +150,9 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 		return ERR_PHFS_IO;
 	return 1;
 }
-phfs_stat(int fd, msg_t *msg, char *sysdir)
+
+
+int phfs_stat(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
 	u32 hdrsz;
@@ -165,7 +161,6 @@ phfs_stat(int fd, msg_t *msg, char *sysdir)
 	if (io->len > MSG_MAXLEN - hdrsz)
 		io->len = MSG_MAXLEN - hdrsz;
 
-	int *tmp_fd = (u32 *)msg->data;
 	struct pho_stat stat_send, test;
 	struct stat st;
 

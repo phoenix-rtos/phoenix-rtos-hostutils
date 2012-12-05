@@ -26,10 +26,18 @@
 
 #ifndef _DISPATCH_H_
 #define _DISPATCH_H_
+#include "msg.h"
 
+typedef enum {
+	SERIAL,
+	PIPE,
+	UDP
+} mode_t;
 
 /* Function reads and dispatches messages */
-extern int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir);
+extern int dispatch(char *dev_addr, mode_t mode, unsigned int speed_port, char *sysdir);
+extern int (*msg_send)(int fd, msg_t *msg);
+extern int (*msg_recv)(int fd, msg_t *msg, int *state);
 
 
 #endif

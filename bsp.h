@@ -62,15 +62,15 @@
 
 
 /* Function sends BSP message */
-extern int bsp_send(int fd, u8 t, u8 *buffer, uint len);
+extern int bsp_send(int fd, u8 t, char *buffer, uint len);
 
 
 /* Function receives BSP message */
-extern int bsp_recv(int fd, u8 *t, u8 *in_buffer, uint len, uint timeout);
+extern int bsp_recv(int fd, u8 *t, char *in_buffer, uint len, uint timeout);
 
 
 /* Function sends BSP request (sends message and waits for answer) */
-extern int bsp_req(int fd, u8 st, u8 *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen, u16 num, u16 *rnum);
+extern int bsp_req(int fd, u8 st, char *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen, u16 num, u16 *rnum);
 
 
 /* Functions sends kernel to Phoenix node */

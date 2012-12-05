@@ -65,9 +65,9 @@ typedef struct _msg_t {
 #define msg_getlen(m)      ((m)->type >> 16)
 
 
-extern int msg_send(int fd, msg_t *msg);
+extern int msg_serial_send(int fd, msg_t *msg);
 
-extern int msg_recv(int fd, msg_t *msg, int *state);
+extern int msg_serial_recv(int fd, msg_t *msg, int *state);
 
 
 #endif

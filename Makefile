@@ -5,10 +5,10 @@
 
 CC = gcc
 LD = gcc
-CFLAGS = -c -Wall -I . -O2 -g
+CFLAGS = -c -Wall -I . -O0 -g
 LDFLAGS = -lm
 
-SRCS = serial.c bsp.c dispatch.c msg.c phfs.c phoenixd.c
+SRCS = serial.c bsp.c dispatch.c msg.c msg_udp.c phfs.c phoenixd.c
 OBJS = $(SRCS:.c=.o)
 BIN = phoenixd
 

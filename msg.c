@@ -33,7 +33,7 @@
 #include "msg.h"
 
 
-u32 msg_csum(msg_t *msg)
+static u32 msg_csum(msg_t *msg)
 {
 	unsigned int k;
 	u32 csum;
@@ -47,7 +47,7 @@ u32 msg_csum(msg_t *msg)
 }
 
 
-int msg_send(int fd, msg_t *msg)
+int msg_serial_send(int fd, msg_t *msg)
 {
 	u8 *p = (u8 *)msg;
 	u8 cs[2];
@@ -84,7 +84,7 @@ int msg_send(int fd, msg_t *msg)
 }
 
 
-int msg_recv(int fd, msg_t *msg, int *state)
+int msg_serial_recv(int fd, msg_t *msg, int *state)
 {
 	int escfl = 0;
 	unsigned int l = 0;

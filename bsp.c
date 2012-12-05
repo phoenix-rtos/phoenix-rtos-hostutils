@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <stdlib.h>
 
 #include "types.h"
 #include "errors.h"
@@ -29,7 +30,7 @@
 
 
 /* Function sends BSP message */
-int bsp_send(int fd, u8 t, u8 *buffer, uint len)
+int bsp_send(int fd, u8 t, char *buffer, uint len)
 {
   s16 fcs;
   uint k, i;
@@ -43,7 +44,7 @@ int bsp_send(int fd, u8 t, u8 *buffer, uint len)
 	frame[0] = t;
 	fcs = t;
   for (k = 0, i = BSP_HDRSZ; k < len; k++) {
-  	if ((buffer[k] != BSP_ESCCHAR) && (buffer[k] != BSP_ENDCHAR))
+  	if (((unsigned char)buffer[k] != BSP_ESCCHAR) && ((unsigned char)buffer[k] != BSP_ENDCHAR))
   		fcs += (char)buffer[k];  		
   	else
   		frame[i++] = BSP_ESCCHAR;
@@ -60,7 +61,7 @@ int bsp_send(int fd, u8 t, u8 *buffer, uint len)
 
 
 /* Function receives BSP message */
-int bsp_recv(int fd, u8 *t, u8 *buffer, uint len, uint timeout)
+int bsp_recv(int fd, u8 *t, char *buffer, uint len, uint timeout)
 {
 	u8 c;
 	uint i, escfl = 0;
@@ -106,7 +107,7 @@ int bsp_recv(int fd, u8 *t, u8 *buffer, uint len, uint timeout)
 
 
 /* Function sends BSP request (sends message and waits for answer) */
-int bsp_req(int fd, u8 st, u8 *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen, u16 num, u16 *rnum)
+int bsp_req(int fd, u8 st, char *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen, u16 num, u16 *rnum)
 {
 	int err;
 	uint fails;

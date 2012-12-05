@@ -9,19 +9,7 @@
  *
  * This file is part of Phoenix-RTOS.
  *
- * Phoenix-RTOS is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * Phoenix-RTOS kernel is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Phoenix-RTOS kernel; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * %LICENSE%
  */
 
 #include <stdlib.h>
@@ -36,7 +24,10 @@
 #include "msg.h"
 #include "dispatch.h"
 #include "phfs.h"
+#include "msg_udp.h"
 
+int (*msg_send)(int fd, msg_t *msg);
+int (*msg_recv)(int fd, msg_t *msg, int *state);
 
 static char *concat(char *s1, char *s2)
 {
@@ -62,7 +53,7 @@ static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, in
 }
 
 /* Function reads and dispatches messages */
-int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
+int dispatch(char *dev_addr, mode_t mode, unsigned int speed_port, char *sysdir)
 {
 	int fd = -1;
 	int fd_out = -1;
@@ -72,48 +63,61 @@ int dispatch(char *dev, int is_pipe, unsigned int speed, char *sysdir)
 	char *dev_in = 0; 
 	char *dev_out = 0;
 	
-	printf("[%d] dispatch: Starting message dispatcher on %s\n", getpid(), dev);
-	if (!is_pipe){
-		if ((fd = serial_open(dev, speed)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev);		
+	printf("[%d] dispatch: Starting message dispatcher on %s\n", getpid(), dev_addr);
+	if (mode == SERIAL) {
+		if ((fd = serial_open(dev_addr, speed_port)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev_addr);
 			return ERR_DISPATCH_IO;
 		}
-	} else {
-		dev_in = concat(dev, ".out"); // because output from quemu is our input
-		dev_out = concat(dev, ".in"); // same logic
+		msg_send = msg_serial_send;
+		msg_recv = msg_serial_recv;
+	}
+	else if (mode == UDP) {
+		if ((fd = udp_open(dev_addr, speed_port)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%hu'\n", getpid(), dev_addr, speed_port);
+			return ERR_DISPATCH_IO;
+		}
+		msg_send = msg_udp_send;
+		msg_recv = msg_udp_recv;
+	}
+	else if (mode == PIPE) {
+		dev_in = concat(dev_addr, ".out"); // because output from quemu is our input
+		dev_out = concat(dev_addr, ".in"); // same logic
 
 		if (connect_pipes(dev_in, dev_out, &fd, &fd_out)) { 
 			free(dev_in);
 			free(dev_out);
 			return ERR_DISPATCH_IO;
 		}
+		msg_send = msg_serial_send;
+		msg_recv = msg_serial_recv;
 	}
 
 	for (state = MSGRECV_DESYN;;) {
 		if (msg_recv(fd, &msg, &state) < 0) {
-			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev, state);
+			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
 			// if this is pipe - try to reconnect - it's because qemu closes pipe 
-			if (is_pipe && --retries) {
+			if (mode == PIPE && --retries) {
 				usleep(10000);
 				(void) connect_pipes(dev_in, dev_out, &fd, &fd_out);
 			}
 			continue;
 		}
 		
-		if (err = phfs_handlemsg((is_pipe ? fd_out : fd), &msg, sysdir))
+		if ((err = phfs_handlemsg((mode == PIPE ? fd_out : fd), &msg, sysdir)))
 			continue;
 
 		switch (msg_gettype(&msg)) {
 		case MSG_ERR:
 			msg_settype(&msg, MSG_ERR);
 			msg_setlen(&msg, MSG_MAXLEN);
-			msg_send((is_pipe ? fd_out : fd), &msg);
+			msg_send((mode == PIPE ? fd_out : fd), &msg);
 			break;
 		}
 			
 	}
 	
-	if (is_pipe) {
+	if (mode == PIPE) {
 		free(dev_in);
 		free(dev_out);
 	}
