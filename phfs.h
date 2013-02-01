@@ -34,6 +34,7 @@
 #define MSG_CLOSE  4
 #define MSG_RESET  5
 #define MSG_FSTAT   6
+#define MSG_HELLO	7
 
 /* Opening flags */
 #define PHFS_RDONLY  0

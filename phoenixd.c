@@ -25,14 +25,14 @@
 #include "errors.h"
 #include "serial.h"
 #include "bsp.h"
+#include "msg_udp.h"
 #include "dispatch.h"
 
 
 extern char *optarg;
 
 
-#define VERSION "1.2"
-#define PHFS_PORT 11520
+#define VERSION "1.3"
 
 int phoenixd_session(char *tty, char *kernel, char *sysdir)
 {
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
 					}
 
 					if (speed_port == 0 || speed_port > 0xffff)
-						speed_port = PHFS_PORT;
+						speed_port = PHFS_DEFPORT;
 				}
 				else
 					speed_port = B115200;

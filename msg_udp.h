@@ -20,6 +20,8 @@
 #include "types.h"
 #include "msg.h"
 
+#define PHFS_DEFPORT	11520
+
 extern int udp_open(char *node, uint port);
 extern int msg_udp_send(int fd, msg_t *msg);
 extern int msg_udp_recv(int fd, msg_t *msg, int *state);
