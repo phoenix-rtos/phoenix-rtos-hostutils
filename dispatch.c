@@ -11,13 +11,12 @@
  *
  * %LICENSE%
  */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #include "errors.h"
 #include "serial.h"
@@ -53,7 +52,7 @@ static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, in
 }
 
 /* Function reads and dispatches messages */
-int dispatch(char *dev_addr, mode_t mode, unsigned int speed_port, char *sysdir)
+int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir)
 {
 	int fd = -1;
 	int fd_out = -1;
