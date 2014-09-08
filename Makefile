@@ -6,9 +6,9 @@
 CC = gcc
 LD = gcc
 CFLAGS = -c -Wall -I . -O0 -g
-LDFLAGS = -lm
+LIBS = -lm -lusb-1.0
 
-SRCS = serial.c bsp.c dispatch.c msg.c msg_udp.c phfs.c phoenixd.c
+SRCS = serial.c bsp.c dispatch.c msg.c msg_udp.c phfs.c phoenixd.c usb_vybrid.c
 OBJS = $(SRCS:.c=.o)
 BIN = phoenixd
 
@@ -20,7 +20,7 @@ all: phoenixd
 $(OBJS): serial.h bsp.h errors.h elf.h
 
 phoenixd: $(OBJS)
-	$(LD) $(LDFLAGS) -o $(BIN) $(OBJS)
+	$(LD) $(LDFLAGS) -o $(BIN) $(OBJS) $(LIBS)
 
 clean:
 	rm -f *.o *~ core

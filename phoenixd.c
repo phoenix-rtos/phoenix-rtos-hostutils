@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 	
 	while (1) {	
-		c = getopt(argc, argv, "k:p:s:1m:i:");
+		c = getopt(argc, argv, "k:p:s:1m:i:u::");
 		if (c < 0)
 			break; 				
 		
@@ -130,6 +130,10 @@ int main(int argc, char *argv[])
 			mode[i] = UDP;
 			ttys[i++] = optarg;
 			break;
+		case 'u':
+			mode[i] = USB_VYBRID;
+			ttys[i++] = optarg; /* Load address */
+			break;
 
 		default:
 			break;
@@ -140,15 +144,21 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n");
 		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
 				"-p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]"
-				"-i ip_addr:port [ [-i ip_addr:port] ... ]\n");
+				"-i ip_addr:port [ [-i ip_addr:port] ... ]"
+				" -u [load_addr]\n");
 		return -1;
 	}
-	for (k = 0; k < i; k++)
-		if (!fork()) {
-		
+	for (k = 0; k < i; k++) {
+		res = fork();
+		if(res < 0) {
+			fprintf(stderr,"Fork error for %d child!\n",k);
+			continue;
+		} else if(res == 0) {
 			if (bspfl)
 				res = phoenixd_session(ttys[k], kernel, sysdir);
-			else {
+			else if(mode[k] == USB_VYBRID) {
+				res = usb_vybrid_dispatch(kernel,ttys[k]);
+			} else {
 				unsigned speed_port = 0;
 
 				if (mode[k] == UDP)	{
@@ -170,6 +180,7 @@ int main(int argc, char *argv[])
 			}
 			return res;
 		}	
+	}
 
 	for (k = 0; k < i; k++)
 		wait(&st);
