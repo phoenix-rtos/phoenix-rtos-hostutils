@@ -42,7 +42,7 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 	
 	fprintf(stderr, "[%d] Starting phoenixd-child on %s\n", getpid(), tty);
 	
-	if ((fd = serial_open(tty, B115200)) < 0) {
+	if ((fd = serial_open(tty, B460800)) < 0) {
 		fprintf(stderr, "[%d] Can't open %s [%d]!\n", getpid(), tty, fd);
 		return ERR_PHOENIXD_TTY;
 	}
@@ -174,7 +174,7 @@ int main(int argc, char *argv[])
 						speed_port = PHFS_DEFPORT;
 				}
 				else
-					speed_port = B115200;
+					speed_port = B460800;
 
 				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
