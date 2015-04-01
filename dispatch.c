@@ -62,7 +62,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 	char *dev_in = 0; 
 	char *dev_out = 0;
 	
-	printf("[%d] dispatch: Starting message dispatcher on %s\n", getpid(), dev_addr);
+	printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%u)\n", getpid(), dev_addr, speed_port);
 	if (mode == SERIAL) {
 		if ((fd = serial_open(dev_addr, speed_port)) < 0) {
 			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev_addr);
@@ -94,10 +94,10 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 
 	for (state = MSGRECV_DESYN;;) {
 		if (msg_recv(fd, &msg, &state) < 0) {
-			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
+			//fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
 			// if this is pipe - try to reconnect - it's because qemu closes pipe 
 			if (mode == PIPE && --retries) {
-				usleep(10000);
+				usleep(100000);
 				(void) connect_pipes(dev_in, dev_out, &fd, &fd_out);
 			}
 			continue;

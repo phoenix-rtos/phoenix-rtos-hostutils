@@ -48,7 +48,7 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 	}
 
 	for (;;) {
-		if ((count = bsp_recv(fd, &t, buff, BSP_MSGSZ, 0)) < 0) {
+		if ((count = bsp_recv(fd, &t, (char*)buff, BSP_MSGSZ, 0)) < 0) {
 			bsp_send(fd, BSP_TYPE_RETR, NULL, 0);
 			continue;
 		}
@@ -72,7 +72,7 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 		/* Handle program request */
 		case BSP_TYPE_PDATA:	
 			fprintf(stderr, "[%d] Load program request on %s, program=%s\n", getpid(), tty, &buff[2]);
-			if ((err = bsp_sendprogram(fd, &buff[2], sysdir)) < 0)
+			if ((err = bsp_sendprogram(fd, (char*)&buff[2], sysdir)) < 0)
 				fprintf(stderr, "[%d] Sending program error [%d]!\n", getpid(), err);
 			break;
 		}

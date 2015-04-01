@@ -116,7 +116,7 @@ int bsp_req(int fd, u8 st, char *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen,
 		if ((err = bsp_send(fd, st, sbuff, slen)) < 0)
 			return err;
 		
-		err = bsp_recv(fd, rt, rbuff, rlen, BSP_TIMEOUT);	
+		err = bsp_recv(fd, rt, (char*)rbuff, rlen, BSP_TIMEOUT);	
 		if (err <= 0) {
 			if (err == ERR_SERIAL_TIMEOUT)
 				return err;
@@ -176,7 +176,7 @@ int bsp_sendkernel(int fd, char *kernel)
 			*(u16 *)sbuff = seg;
 			*(u16 *)&sbuff[2] = offs;
 			
-			if ((err = bsp_req(fd, BSP_TYPE_SHDR, sbuff, 4, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+			if ((err = bsp_req(fd, BSP_TYPE_SHDR, sbuff, 4, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 				fclose(f);
 				return err;
 			}
@@ -189,7 +189,7 @@ int bsp_sendkernel(int fd, char *kernel)
 					return ERR_FILE;
 				}
 
-				if ((err = bsp_req(fd, BSP_TYPE_KDATA, sbuff, BSP_MSGSZ, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+				if ((err = bsp_req(fd, BSP_TYPE_KDATA, sbuff, BSP_MSGSZ, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 					fclose(f);
 					return err;
 				}
@@ -201,7 +201,7 @@ int bsp_sendkernel(int fd, char *kernel)
 					fclose(f);
  					return ERR_FILE;
  				}
-				if ((err = bsp_req(fd, BSP_TYPE_KDATA, sbuff, size, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+				if ((err = bsp_req(fd, BSP_TYPE_KDATA, sbuff, size, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 					fclose(f);
 					return err;
 				}
@@ -240,20 +240,20 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 	sprintf(tname, "%s/%s", sysdir, name);
 	
 	if ((f = fopen(tname, "r")) == NULL) {
-		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, rbuff, BSP_MSGSZ, num, &num);
+		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, (u8*)rbuff, BSP_MSGSZ, num, &num);
 		free(tname);
 		return ERR_FILE;
 	}
 	free(tname);
 	
 	if (fread(&hdr, sizeof(Elf32_Ehdr), 1, f) != 1) {
-		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, rbuff, BSP_MSGSZ, num, &num);
+		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, (u8*)rbuff, BSP_MSGSZ, num, &num);
 		fclose(f);
 		return ERR_FILE;
 	}
 	
 	/* Send ELF header */	
-	if ((err = bsp_req(fd, BSP_TYPE_EHDR, (char *)&hdr, sizeof(Elf32_Ehdr), &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+	if ((err = bsp_req(fd, BSP_TYPE_EHDR, (char *)&hdr, sizeof(Elf32_Ehdr), &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 		fclose(f);
 		return err;
 	}
@@ -267,7 +267,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 		}
 		
 		if ((phdr.p_type == PT_LOAD) && (phdr.p_vaddr != 0)) {
-			if ((err = bsp_req(fd, BSP_TYPE_PHDR, (char *)&phdr, sizeof(Elf32_Phdr), &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+			if ((err = bsp_req(fd, BSP_TYPE_PHDR, (char *)&phdr, sizeof(Elf32_Phdr), &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 				fclose(f);
 				return err;
 			}
@@ -278,7 +278,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 					fclose(f);
 					return ERR_FILE;
 				}
-				if ((err = bsp_req(fd, BSP_TYPE_PDATA, sbuff, BSP_MSGSZ, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+				if ((err = bsp_req(fd, BSP_TYPE_PDATA, sbuff, BSP_MSGSZ, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 					fclose(f);				
 					return err;
 				}
@@ -290,7 +290,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 					fclose(f);
 					return ERR_FILE;
 				}
-				if ((err = bsp_req(fd, BSP_TYPE_PDATA, sbuff, size, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+				if ((err = bsp_req(fd, BSP_TYPE_PDATA, sbuff, size, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 					fclose(f);
 					return err;
 				}
@@ -299,7 +299,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 	}
 
 	/* Last frame, which finishes transaction */
-	if ((err = bsp_req(fd, BSP_TYPE_GO, sbuff, 1, &t, rbuff, BSP_MSGSZ, num, &num)) < 0) {
+	if ((err = bsp_req(fd, BSP_TYPE_GO, sbuff, 1, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 		fclose(f);
 		return err;
 	}

@@ -302,7 +302,6 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr)
 			libusb_attach_kernel_driver(h,0);
 	}
 
-END:
 	printf("Closing Vybrid usb loader\n");
     if(h) libusb_close(h);
     libusb_exit(0);
