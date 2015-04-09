@@ -94,7 +94,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 
 	for (state = MSGRECV_DESYN;;) {
 		if (msg_recv(fd, &msg, &state) < 0) {
-			//fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
+			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
 			// if this is pipe - try to reconnect - it's because qemu closes pipe 
 			if (mode == PIPE && --retries) {
 				usleep(100000);
