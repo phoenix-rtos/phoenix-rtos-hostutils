@@ -83,7 +83,8 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 
 int main(int argc, char *argv[])
 {
-	char c, bspfl = 0;
+	int c;
+	char bspfl = 0;
 	char *kernel = "../kernel/phoenix";
 	char *sysdir = "../sys";
 	char *ttys[8];
