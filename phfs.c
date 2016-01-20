@@ -34,7 +34,8 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 	
 	msg->data[MSG_MAXLEN] = 0;
 
-	f =  (flags == PHFS_RDONLY) ? O_RDONLY : (O_RDWR | O_CREAT);
+	f =  ((flags & 0x1) == PHFS_RDONLY) ? O_RDONLY : O_RDWR;
+	f =  ((flags & 0x2) == PHFS_CREATE) ? (f | O_CREAT) : f;
 	msg_settype(msg, MSG_OPEN);
 	msg_setlen(msg, sizeof(int));
 	

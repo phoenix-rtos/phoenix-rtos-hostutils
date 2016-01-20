@@ -39,6 +39,7 @@
 /* Opening flags */
 #define PHFS_RDONLY  0
 #define PHFS_RDWR    1
+#define PHFS_CREATE  2
 
 
 typedef struct _msg_phfsio_t {
