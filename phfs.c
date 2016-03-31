@@ -49,7 +49,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 		else
 			ofd = open(realpath, f, S_IRUSR | S_IWUSR);
 
-		printf("[%d] phfs: MSG_OPEN path='%s', realpath='%s', ofd=%d\n", getpid(), path, realpath, ofd);
+		printf("[%d] phfs: %s path='%s', realpath='%s', ofd=%d\n", getpid(), ((f & O_CREAT) == O_CREAT) ? "MSG_OPEN" : "MSG_CREATE", path, realpath, ofd);
 		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
 		free(realpath);		
 	}
