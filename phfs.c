@@ -49,7 +49,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 		else
 			ofd = open(realpath, f, S_IRUSR | S_IWUSR);
 
-		printf("[%d] phfs: %s path='%s', realpath='%s', ofd=%d\n", getpid(), ((f & O_CREAT) == O_CREAT) ? "MSG_OPEN" : "MSG_CREATE", path, realpath, ofd);
+		printf("[%d] phfs: %s path='%s', realpath='%s', ofd=%d\n", getpid(), ((f & O_CREAT) == O_CREAT) ? "MSG_CREATE" : "MSG_OPEN", path, realpath, ofd);
 		*(u32 *)msg->data = ofd > 0 ? ofd : 0;
 		free(realpath);		
 	}
@@ -103,6 +103,9 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = write(io->handle, io->buff, io->len);
+
+	printf("[%d] phfs: MSG_WRITE fd=%d, pos=%d, ret=%d\n",
+		getpid(), io->handle, io->pos, io->len);
 
 	l =  io->len > 0 ? io->len : 0;
 	io->pos += l;
