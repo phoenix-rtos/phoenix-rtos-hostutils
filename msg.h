@@ -64,8 +64,13 @@ typedef struct _msg_t {
 #define msg_setlen(m, l)   ((m)->type = ((m)->type & 0xffff) | ((l) << 16))
 #define msg_getlen(m)      ((m)->type >> 16)
 
+#define msg_setcsum(m, c)  ((m)->csum = ((m)->csum & ~0xffff) | (c & 0xffff))
+#define msg_getcsum(m)     ((m)->csum & 0xffff)
 
-extern int msg_serial_send(int fd, msg_t *msg);
+#define msg_setseq(m, s)   ((m)->csum = ((m)->csum & 0xffff) | ((s) << 16))
+#define msg_getseq(m)      ((m)->csum >> 16)
+
+extern int msg_serial_send(int fd, msg_t *msg, u16 seq);
 
 extern int msg_serial_recv(int fd, msg_t *msg, int *state);
 

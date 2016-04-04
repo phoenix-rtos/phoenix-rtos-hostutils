@@ -47,7 +47,7 @@ static u32 msg_csum(msg_t *msg)
 }
 
 
-int msg_serial_send(int fd, msg_t *msg)
+int msg_serial_send(int fd, msg_t *msg, u16 seq)
 {
 	u8 *p = (u8 *)msg;
 	u8 cs[2];

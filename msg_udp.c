@@ -71,13 +71,14 @@ in_addr_t bcast_addr(in_addr_t in_addr)
 static u32 msg_csum(msg_t *msg)
 {
 	unsigned int k;
-	u32 csum;
+	u16 csum;
 	
 	csum = 0;
 	for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
 		if (k >= sizeof(msg->csum))
 			csum += *((u8 *)msg + k);
 	}
+	csum += msg_getseq(msg);
 	return csum;
 }
 
@@ -220,46 +221,22 @@ static void hex_dump(void *data, int size)
 }
 #endif
 
-int msg_udp_send(int fd, msg_t *msg)
+int msg_udp_send(int fd, msg_t *msg, u16 seq)
 {
 	unsigned int k;
 	u8 buff[MSG_MAXLEN * 2 + MSG_HDRSZ * 2];
 	ssize_t len;
 	unsigned int i = 0;
 	
-	msg->csum = msg_csum(msg);
-	
+	msg_setseq(msg, seq);
+	msg_setcsum(msg, msg_csum(msg));
+
 	if (msg_getlen(msg) > MSG_MAXLEN)
 		return ERR_MSG_ARG;
 
-#ifdef PHFS_UDPENCODE
-	{
-		u8 *p = (u8 *)msg;
-		u8 cs[2];
-		
-		cs[0] = MSG_MARK;
-		buff[i++] = cs[0];
-
-		for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
-
-			if ((p[k] == MSG_MARK) || (p[k] == MSG_ESC)) {
-				cs[0] = MSG_ESC;
-				if (p[k] == MSG_MARK)
-					cs[1] = MSG_ESCMARK;
-				else
-					cs[1] = MSG_ESCESC;
-				memcpy(&buff[i], cs, 2);
-				i += 2;
-			}
-			else
-				buff[i++] = p[k];
-		}
-	}
-#else
 	i = MSG_HDRSZ + msg_getlen(msg);
 	memcpy(buff, msg, i);
 	k = i;
-#endif
 	
 #ifdef HEXDUMP
 	hex_dump(buff, i);
@@ -285,62 +262,7 @@ int msg_udp_recv(int fd, msg_t *msg, int *state)
 		return ERR_MSG_IO;
 	}
 
-#ifdef PHFS_UDPENCODE
-	{
-		int escfl = 0;
-		u8  *buffptr;
-		unsigned l = 0;
-		
-		for (buffptr = buff; buffptr < buff + bufflen; buffptr++) {
 
-			if (*state == MSGRECV_FRAME) {
-
-				/* Return error if frame is to long */
-				if (l == MSG_HDRSZ + MSG_MAXLEN) {
-					*state = MSGRECV_DESYN;
-					return ERR_MSG_IO;
-				}
-
-				/* Return error if terminator discovered */
-				if (*buffptr == MSG_MARK) {
-					return ERR_MSG_IO;
-				}
-
-				if (!escfl && (*buffptr == MSG_ESC)) {
-					escfl = 1;
-					continue;
-				}
-				if (escfl) {
-					if (*buffptr == MSG_ESCMARK)
-						*buffptr = MSG_MARK;
-					if (*buffptr == MSG_ESCESC)
-						*buffptr = MSG_ESC;
-					escfl = 0;
-				}
-				*((u8 *)msg + l++) = *buffptr;
-
-				/* Frame received */ 
-				if ((l >= MSG_HDRSZ) && (l == msg_getlen(msg) + MSG_HDRSZ)) {
-					*state = MSGRECV_DESYN;
-					break;
-				}
-			}
-			else {
-				/* Synchronize */
-				if (*buffptr == MSG_MARK)
-					*state = MSGRECV_FRAME;
-			}
-		}
-	}
-	
-	/* Verify received message */
-	if (msg->csum != msg_csum(msg)) {
-		return ERR_MSG_IO;
-	}
-
-	return l;
-#else
 	memcpy(msg, buff, bufflen);
 	return bufflen;
-#endif
 }

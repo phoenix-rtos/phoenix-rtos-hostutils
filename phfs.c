@@ -31,6 +31,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 {
 	char *path = (char *)&msg->data[sizeof(u32)], *realpath;
 	int flags = *(u32 *)msg->data, f = 0, ofd;
+	u16 seq = msg_getseq(msg);
 	
 	msg->data[MSG_MAXLEN] = 0;
 
@@ -54,7 +55,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 		free(realpath);		
 	}
 	
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 	return 1;
 }
@@ -63,6 +64,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 int phfs_read(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
+	u16 seq = msg_getseq(msg);
 	u32 hdrsz;
 	u32 l, pos, len;
 
@@ -84,7 +86,7 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 	msg_settype(msg, MSG_READ);
 	msg_setlen(msg, l + hdrsz);
 
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 
 	return 1;
@@ -95,6 +97,7 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
 	u32 hdrsz, l;
+	u16 seq = msg_getseq(msg);
 	
 	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);
 	
@@ -113,7 +116,7 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 	msg_settype(msg, MSG_WRITE);
 	msg_setlen(msg, l + hdrsz);
 	
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 
 	return 1;
@@ -123,13 +126,14 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 int phfs_close(int fd, msg_t *msg, char *sysdir)
 {
 	int ofd = *(int *)msg->data;
+	u16 seq = msg_getseq(msg);
 
 	printf("[%d] phfs: MSG_CLOSE ofd=%d\n", getpid(), ofd);
 	close(ofd);
 	msg_settype(msg, MSG_CLOSE);
 	msg_setlen(msg, sizeof(int));
 	
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 	return 1;
 }
@@ -139,6 +143,7 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 {
 	int i;
 	struct rlimit rlim;
+	u16 seq = msg_getseq(msg);
 	
 	printf("[%d] phfs: MSG_RESET\n", getpid());
 	getrlimit(RLIMIT_NOFILE, &rlim);	
@@ -150,7 +155,7 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 	msg_settype(msg, MSG_RESET);
 	msg_setlen(msg, 0);
 	
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 	return 1;
 }
@@ -159,6 +164,7 @@ int phfs_reset(int fd, msg_t *msg, char *sysdir)
 int phfs_stat(int fd, msg_t *msg, char *sysdir)
 {
 	msg_phfsio_t *io = (msg_phfsio_t *)msg->data;
+	u16 seq = msg_getseq(msg);
 	u32 hdrsz;
 	u32 l;
 	hdrsz = (u32)((u8 *)io->buff - (u8 *)io);
@@ -196,7 +202,7 @@ int phfs_stat(int fd, msg_t *msg, char *sysdir)
 
 	printf("[%d] phfs: MSG_STAT id:%d  \n", getpid(),io->handle);
 
-	if (msg_send(fd, msg) < 0)
+	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
 	return 1;
 }
@@ -277,5 +283,8 @@ int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
 		res = phfs_stat(fd, msg, sysdir);
 		break;
 	}
+	if (res < 0)
+		printf("[%d] phfs: msg error %d \n", getpid(), res);
+
 	return res;
 }

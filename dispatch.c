@@ -25,7 +25,7 @@
 #include "phfs.h"
 #include "msg_udp.h"
 
-int (*msg_send)(int fd, msg_t *msg);
+int (*msg_send)(int fd, msg_t *msg, u16 seq);
 int (*msg_recv)(int fd, msg_t *msg, int *state);
 
 static char *concat(char *s1, char *s2)
@@ -102,7 +102,9 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 			}
 			continue;
 		}
+		fprintf(stderr, "[%d] dispatch: Message received\n", getpid());
 		
+		u16 seq = msg_getseq(&msg);
 		if ((err = phfs_handlemsg((mode == PIPE ? fd_out : fd), &msg, sysdir)))
 			continue;
 
@@ -110,7 +112,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 		case MSG_ERR:
 			msg_settype(&msg, MSG_ERR);
 			msg_setlen(&msg, MSG_MAXLEN);
-			msg_send((mode == PIPE ? fd_out : fd), &msg);
+			msg_send((mode == PIPE ? fd_out : fd), &msg, seq);
 			break;
 		}
 			
