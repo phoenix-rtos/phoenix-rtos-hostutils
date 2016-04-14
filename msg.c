@@ -36,13 +36,14 @@
 static u32 msg_csum(msg_t *msg)
 {
 	unsigned int k;
-	u32 csum;
-	
+	u16 csum;
+
 	csum = 0;
 	for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
 		if (k >= sizeof(msg->csum))
 			csum += *((u8 *)msg + k);
 	}
+	csum += msg_getseq(msg);
 	return csum;
 }
 
@@ -55,7 +56,8 @@ int msg_serial_send(int fd, msg_t *msg, u16 seq)
 	u8 buff[MSG_MAXLEN * 2 + MSG_HDRSZ * 2];
 	unsigned int i = 0;
 	
-	msg->csum = msg_csum(msg);
+	msg_setseq(msg, seq);
+	msg_setcsum(msg, msg_csum(msg));
 	cs[0] = MSG_MARK;
 	
 	if (msg_getlen(msg) > MSG_MAXLEN)
@@ -136,9 +138,9 @@ int msg_serial_recv(int fd, msg_t *msg, int *state)
 	}
 	
 	/* Verify received message */
-	if (msg->csum != msg_csum(msg)) {
-		return ERR_MSG_IO;
-	}
+	//if (msg->csum != msg_csum(msg)) {
+	//	return ERR_MSG_IO;
+	//}
 
 	return l;
 }
