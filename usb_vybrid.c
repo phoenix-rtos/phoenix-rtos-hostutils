@@ -20,7 +20,7 @@
 #define SET_FORMAT(b,v) (b)[6]=(v);
 
 
-inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t size)
+static inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t size)
 {
     SET_CMD_TYPE(b,0x04);
     SET_ADDR(b,addr);
@@ -29,7 +29,7 @@ inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t size)
 }
 
 
-inline void set_jmp_cmd(unsigned char* b,uint32_t addr)
+static inline void set_jmp_cmd(unsigned char* b,uint32_t addr)
 {
     SET_CMD_TYPE(b,0x0b);
     SET_ADDR(b,addr);
@@ -37,13 +37,13 @@ inline void set_jmp_cmd(unsigned char* b,uint32_t addr)
 }
 
 
-inline void set_status_cmd(unsigned char* b)
+static inline void set_status_cmd(unsigned char* b)
 {
     SET_CMD_TYPE(b,0x05);
 }
 
 
-inline void set_write_reg_cmd(unsigned char* b,uint32_t addr,uint32_t v)
+static inline void set_write_reg_cmd(unsigned char* b,uint32_t addr,uint32_t v)
 {
     SET_CMD_TYPE(b,0x02);
     SET_ADDR(b,addr);
