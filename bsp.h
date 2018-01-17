@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP protocol routines
@@ -32,7 +32,7 @@
 
 
 /* BSP sizes */
-#define BSP_HDRSZ	    3 
+#define BSP_HDRSZ	    3
 #define BSP_MSGSZ	    1024
 #define BSP_FRAMESZ	  BSP_MSGSZ * 2 + BSP_HDRSZ
 
@@ -43,11 +43,11 @@
 
 
 /* BSP frame types */
-#define BSP_TYPE_ACK	     1
-#define BSP_TYPE_RETR	     2
-#define BSP_TYPE_KREQ	     3
-#define BSP_TYPE_SHDR	     4
-#define BSP_TYPE_KDATA	   5
+#define BSP_TYPE_ACK       1
+#define BSP_TYPE_RET       2
+#define BSP_TYPE_KREQ      3
+#define BSP_TYPE_SHDR      4
+#define BSP_TYPE_KDATA     5
 #define BSP_TYPE_GO	       6
 #define BSP_TYPE_PDATA     7
 #define BSP_TYPE_EHDR      8

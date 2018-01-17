@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP protocol implementation
@@ -32,31 +32,31 @@
 /* Function sends BSP message */
 int bsp_send(int fd, u8 t, char *buffer, uint len)
 {
-  s16 fcs;
-  uint k, i;
-  int err;
-  u8 frame[BSP_FRAMESZ];
+	s16 fcs;
+	uint k, i;
+	int err;
+	u8 frame[BSP_FRAMESZ];
 
-  if (len > BSP_MSGSZ)
-	 return ERR_ARG;
+	if (len > BSP_MSGSZ)
+		return ERR_ARG;
 
 	/* Calculate checksum */
 	frame[0] = t;
 	fcs = t;
-  for (k = 0, i = BSP_HDRSZ; k < len; k++) {
-  	if (((unsigned char)buffer[k] != BSP_ESCCHAR) && ((unsigned char)buffer[k] != BSP_ENDCHAR))
-  		fcs += (char)buffer[k];  		
-  	else
-  		frame[i++] = BSP_ESCCHAR;
-  	frame[i++] = buffer[k];
-  }
-  frame[i++] = BSP_ENDCHAR;
-  *(s16 *)&frame[1] = fcs;
- 
-	if ((err = serial_write(fd, frame, i)) < 0)
-				return err;
+	for (k = 0, i = BSP_HDRSZ; k < len; k++) {
+		if (((unsigned char)buffer[k] != BSP_ESCCHAR) && ((unsigned char)buffer[k] != BSP_ENDCHAR))
+			fcs += (char)buffer[k];
+		else
+			frame[i++] = BSP_ESCCHAR;
+		frame[i++] = buffer[k];
+	}
+	frame[i++] = BSP_ENDCHAR;
+	*(s16 *)&frame[1] = fcs;
 
-  return ERR_NONE;
+	if ((err = serial_write(fd, frame, i)) < 0)
+		return err;
+
+	return ERR_NONE;
 }
 
 
@@ -70,12 +70,12 @@ int bsp_recv(int fd, u8 *t, char *buffer, uint len, uint timeout)
 
 	if (len < BSP_MSGSZ)
 		return ERR_ARG;
-	
+
 	if ((err = serial_read(fd, t, 1, timeout)) < 0)
 		return err;
 	if ((err = serial_read(fd, (u8 *)&sfcs, 2, timeout)) < 0)
 		return err;
-	
+
 	for (fcs = *t, i = 0, escfl = 0;;) {
 		if ((err = serial_read(fd, &c, 1, timeout)) < 0)
 			return err;
@@ -87,13 +87,13 @@ int bsp_recv(int fd, u8 *t, char *buffer, uint len, uint timeout)
 			escfl = 0;
 			continue;
 		}
-		
+
 		if (c == BSP_ENDCHAR) {
 			if (sfcs != fcs)
 				return ERR_BSP_FCS;
 			break;
 		}
-			
+
 		if (c == BSP_ESCCHAR) {
 			escfl = 1;
 			continue;
@@ -101,7 +101,7 @@ int bsp_recv(int fd, u8 *t, char *buffer, uint len, uint timeout)
 		buffer[i++] = c;
 		fcs += (char)c;
 	}
-	
+
 	return i;
 }
 
@@ -111,24 +111,24 @@ int bsp_req(int fd, u8 st, char *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen,
 {
 	int err;
 	uint fails;
-	
+
 	for (fails = 0; fails < BSP_MAXREP; fails++) {
 		if ((err = bsp_send(fd, st, sbuff, slen)) < 0)
 			return err;
-		
-		err = bsp_recv(fd, rt, (char*)rbuff, rlen, BSP_TIMEOUT);	
+
+		err = bsp_recv(fd, rt, (char*)rbuff, rlen, BSP_TIMEOUT);
 		if (err <= 0) {
 			if (err == ERR_SERIAL_TIMEOUT)
 				return err;
 		}
 		else {
 			if (*(u16 *)rbuff != num) {
-				*rnum = *(u16 *)rbuff; 
+				*rnum = *(u16 *)rbuff;
 				return err;
 			}
 		}
 	}
-	
+
 	return ERR_BSP_RETR;
 }
 
@@ -141,19 +141,19 @@ int bsp_req(int fd, u8 st, char *sbuff, uint slen, u8 *rt, u8 *rbuff, uint rlen,
 /* Functions sends kernel to Phoenix node */
 int bsp_sendkernel(int fd, char *kernel)
 {
-  FILE *f;
-  char sbuff[BSP_MSGSZ], rbuff[BSP_MSGSZ];
-  Elf32_Ehdr hdr;
-  Elf32_Phdr phdr;
-  Elf32_Half k, i;
-  Elf32_Half seg, offs;
-  int size, l, err;
-  u8 t;
-  u16 num = 0;
-  
+	FILE *f;
+	char sbuff[BSP_MSGSZ], rbuff[BSP_MSGSZ];
+	Elf32_Ehdr hdr;
+	Elf32_Phdr phdr;
+	Elf32_Half k, i;
+	Elf32_Half seg, offs;
+	int size, l, err;
+	u8 t;
+	u16 num = 0;
+
 	/* Open kernel file and read ELF header */
 	if ((f = fopen(kernel, "r")) == NULL)
-		return ERR_FILE;	
+		return ERR_FILE;
 	if (fread(&hdr, sizeof(Elf32_Ehdr), 1, f) != 1) {
 		fclose(f);
 		return ERR_FILE;
@@ -166,16 +166,16 @@ int bsp_sendkernel(int fd, char *kernel)
 			fclose(f);
 			return ERR_FILE;
 		}
-		
+
 		if ((phdr.p_type == PT_LOAD) && (phdr.p_vaddr != 0)) {
 
 			/* Calculate realmode address */
 			seg = (phdr.p_vaddr - KERNEL_BASE) / 16;
 			offs = (phdr.p_vaddr - KERNEL_BASE) % 16;
-			
+
 			*(u16 *)sbuff = seg;
 			*(u16 *)&sbuff[2] = offs;
-			
+
 			if ((err = bsp_req(fd, BSP_TYPE_SHDR, sbuff, 4, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 				fclose(f);
 				return err;
@@ -194,13 +194,13 @@ int bsp_sendkernel(int fd, char *kernel)
 					return err;
 				}
 			}
-			
-		  size = phdr.p_filesz % BSP_MSGSZ;
-		  if (size != 0) {
+
+			size = phdr.p_filesz % BSP_MSGSZ;
+			if (size != 0) {
 				if ((l = fread(sbuff, 1, size, f)) != size) {
 					fclose(f);
- 					return ERR_FILE;
- 				}
+					return ERR_FILE;
+				}
 				if ((err = bsp_req(fd, BSP_TYPE_KDATA, sbuff, size, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 					fclose(f);
 					return err;
@@ -212,7 +212,7 @@ int bsp_sendkernel(int fd, char *kernel)
 	/* Last message */
 	if ((err = bsp_send(fd, BSP_TYPE_GO, sbuff, 1)) < 0) {
 		fclose(f);
-	  return err;
+		return err;
 	}
 	fclose(f);
 	fprintf(stderr, "[%d] System started\n", getpid());
@@ -224,40 +224,40 @@ int bsp_sendkernel(int fd, char *kernel)
 /* Function sends user program to Phoenix node */
 int bsp_sendprogram(int fd, char *name, char *sysdir)
 {
-  FILE *f;
-  char sbuff[BSP_MSGSZ], rbuff[BSP_MSGSZ];
-  Elf32_Ehdr hdr;
-  Elf32_Phdr phdr;
-  Elf32_Half k, i;
-  uint size, l;
-  u8 t;
-  u16 num = 0;
-  char *tname;
-  int err;
-  
-  if ((tname = (char *)malloc(strlen(sysdir) + 1 + strlen(name) + 1)) == NULL)
-  	return ERR_MEM;
+	FILE *f;
+	char sbuff[BSP_MSGSZ], rbuff[BSP_MSGSZ];
+	Elf32_Ehdr hdr;
+	Elf32_Phdr phdr;
+	Elf32_Half k, i;
+	uint size, l;
+	u8 t;
+	u16 num = 0;
+	char *tname;
+	int err;
+
+	if ((tname = (char *)malloc(strlen(sysdir) + 1 + strlen(name) + 1)) == NULL)
+		return ERR_MEM;
 	sprintf(tname, "%s/%s", sysdir, name);
-	
+
 	if ((f = fopen(tname, "r")) == NULL) {
 		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, (u8*)rbuff, BSP_MSGSZ, num, &num);
 		free(tname);
 		return ERR_FILE;
 	}
 	free(tname);
-	
+
 	if (fread(&hdr, sizeof(Elf32_Ehdr), 1, f) != 1) {
 		bsp_req(fd, BSP_TYPE_ERR, sbuff, 1, &t, (u8*)rbuff, BSP_MSGSZ, num, &num);
 		fclose(f);
 		return ERR_FILE;
 	}
-	
-	/* Send ELF header */	
+
+	/* Send ELF header */
 	if ((err = bsp_req(fd, BSP_TYPE_EHDR, (char *)&hdr, sizeof(Elf32_Ehdr), &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 		fclose(f);
 		return err;
 	}
-	
+
 	/* Send program segments */
 	for (k = 0; k < hdr.e_phnum; k++) {
 		fseek(f, hdr.e_phoff + k * sizeof(Elf32_Phdr), SEEK_SET);
@@ -265,7 +265,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 			fclose(f);
 			return ERR_FILE;
 		}
-		
+
 		if ((phdr.p_type == PT_LOAD) && (phdr.p_vaddr != 0)) {
 			if ((err = bsp_req(fd, BSP_TYPE_PHDR, (char *)&phdr, sizeof(Elf32_Phdr), &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
 				fclose(f);
@@ -279,13 +279,13 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 					return ERR_FILE;
 				}
 				if ((err = bsp_req(fd, BSP_TYPE_PDATA, sbuff, BSP_MSGSZ, &t, (u8*)rbuff, BSP_MSGSZ, num, &num)) < 0) {
-					fclose(f);				
+					fclose(f);
 					return err;
 				}
 			}
-			
-		  size = phdr.p_filesz % BSP_MSGSZ;
-		  if (size != 0) {
+
+			size = phdr.p_filesz % BSP_MSGSZ;
+			if (size != 0) {
 				if ((l = fread(sbuff, 1, size, f)) != size) {
 					fclose(f);
 					return ERR_FILE;
@@ -303,7 +303,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 		fclose(f);
 		return err;
 	}
-	
+
 	fclose(f);
 	return ERR_NONE;
 }

@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP2 message dispatcher
@@ -37,15 +37,15 @@ static char *concat(char *s1, char *s2)
 
 }
 
-static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, int *fd_out) 
+static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, int *fd_out)
 {
 		if ((*fd_in = open(dev_in, O_RDONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);	
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);
 			return ERR_DISPATCH_IO;
 		}
 
 		if ((*fd_out = open(dev_out, O_WRONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);		
+			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);
 			return ERR_DISPATCH_IO;
 		}
 	return 0;
@@ -59,9 +59,9 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 	int retries = 128;
 	msg_t msg;
 	int state, err;
-	char *dev_in = 0; 
+	char *dev_in = 0;
 	char *dev_out = 0;
-	
+
 	printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%u)\n", getpid(), dev_addr, speed_port);
 	if (mode == SERIAL) {
 		if ((fd = serial_open(dev_addr, speed_port)) < 0) {
@@ -83,7 +83,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 		dev_in = concat(dev_addr, ".out"); // because output from quemu is our input
 		dev_out = concat(dev_addr, ".in"); // same logic
 
-		if (connect_pipes(dev_in, dev_out, &fd, &fd_out)) { 
+		if (connect_pipes(dev_in, dev_out, &fd, &fd_out)) {
 			free(dev_in);
 			free(dev_out);
 			return ERR_DISPATCH_IO;
@@ -95,7 +95,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 	for (state = MSGRECV_DESYN;;) {
 		if (msg_recv(fd, &msg, &state) < 0) {
 			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
-			// if this is pipe - try to reconnect - it's because qemu closes pipe 
+			// if this is pipe - try to reconnect - it's because qemu closes pipe
 			if (mode == PIPE && --retries) {
 				usleep(100000);
 				(void) connect_pipes(dev_in, dev_out, &fd, &fd_out);
@@ -103,7 +103,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 			continue;
 		}
 		fprintf(stderr, "[%d] dispatch: Message received\n", getpid());
-		
+
 		u16 seq = msg_getseq(&msg);
 		if ((err = phfs_handlemsg((mode == PIPE ? fd_out : fd), &msg, sysdir)))
 			continue;
@@ -115,13 +115,13 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 			msg_send((mode == PIPE ? fd_out : fd), &msg, seq);
 			break;
 		}
-			
+
 	}
-	
+
 	if (mode == PIPE) {
 		free(dev_in);
 		free(dev_out);
 	}
-	
+
 	return 0;
 }

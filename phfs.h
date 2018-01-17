@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * Phoenix remote filesystem server
@@ -55,17 +55,17 @@ extern int phfs_handlemsg(int fd, msg_t *msg, char *sysdir);
 struct	pho_stat
 {
 
-	u32 	st_dev;
-	u32 	st_ino;
-	u16 	st_mode;
-	u16 	st_nlink;
-	u16 	st_uid;
-	u16 	st_gid;
-	u32 	st_rdev;
-	u32  	st_size;
+	u32		st_dev;
+	u32		st_ino;
+	u16		st_mode;
+	u16		st_nlink;
+	u16		st_uid;
+	u16		st_gid;
+	u32		st_rdev;
+	u32		st_size;
 
-	u32 	st_atime_;
-  	u32		st_mtime_;
+	u32		st_atime_;
+	u32		st_mtime_;
 	u32		st_ctime_;
 	s32		st_blksize;
 	s32		st_blocks;
