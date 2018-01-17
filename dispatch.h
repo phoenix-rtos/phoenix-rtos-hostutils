@@ -40,7 +40,7 @@ extern int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char 
 extern int (*msg_send)(int fd, msg_t *msg, u16 seq);
 extern int (*msg_recv)(int fd, msg_t *msg, int *state);
 
-extern int usb_vybrid_dispatch(char* kernel, char* loadAddr);
+extern int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jump_addr);
 
 
 #endif

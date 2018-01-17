@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 	
 	while (1) {	
-		c = getopt(argc, argv, "k:p:s:1m:i:u::");
+		c = getopt(argc, argv, "k:p:s:1m:i:u:");
 		if (c < 0)
 			break; 				
 		
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
 				"-p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]"
 				"-i ip_addr:port [ [-i ip_addr:port] ... ]"
-				" -u [load_addr]\n");
+				" -u [load_addr[:jump_addr]]\n");
 		return -1;
 	}
 	for (k = 0; k < i; k++) {
@@ -158,7 +158,11 @@ int main(int argc, char *argv[])
 			if (bspfl)
 				res = phoenixd_session(ttys[k], kernel, sysdir);
 			else if(mode[k] == USB_VYBRID) {
-				res = usb_vybrid_dispatch(kernel,ttys[k]);
+				char *jumAddr = NULL;
+				if ((jumAddr = strchr(ttys[k], ':')) != NULL)
+					*jumAddr++ = '\0';
+
+				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr);
 			} else {
 				unsigned speed_port = 0;
 

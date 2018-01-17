@@ -237,6 +237,7 @@ int bsp_sendprogram(int fd, char *name, char *sysdir)
 
 	if ((tname = (char *)malloc(strlen(sysdir) + 1 + strlen(name) + 1)) == NULL)
 		return ERR_MEM;
+
 	sprintf(tname, "%s/%s", sysdir, name);
 
 	if ((f = fopen(tname, "r")) == NULL) {
