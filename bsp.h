@@ -44,7 +44,7 @@
 
 /* BSP frame types */
 #define BSP_TYPE_ACK       1
-#define BSP_TYPE_RET       2
+#define BSP_TYPE_RETR      2
 #define BSP_TYPE_KREQ      3
 #define BSP_TYPE_SHDR      4
 #define BSP_TYPE_KDATA     5

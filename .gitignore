@@ -1,0 +1,7 @@
+*.config
+*.creator*
+*.files
+*.includes
+
+*.o
+phoenixd
