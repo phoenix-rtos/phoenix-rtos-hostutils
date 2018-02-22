@@ -25,6 +25,8 @@
 #define SYSPAGESZ_MAX 0x400
 #define IMGSZ_MAX 68 * 1024
 #define ADDR_OCRAM 0x00907000
+#define PADDR_BEGIN 0x80000000
+#define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024)
 
 
 typedef struct {
@@ -36,8 +38,12 @@ typedef struct {
 
 
 typedef struct {
+	uint32_t pbegin;
+	uint32_t pend;
+
 	uint32_t kernel;
 	uint32_t kernelsize;
+
 	uint32_t console;
 	char arg[256];
 
@@ -51,6 +57,8 @@ static void syspage_dump(syspage_t *s)
 	int i;
 
 	printf("\nSyspage:\n");
+	printf("\tpaddr begin: 0x%04x\n", s->pbegin);
+	printf("\tpaddr end: 0x%04x\n", s->pend);
 	printf("\tkernel: 0x%04x\n", s->kernel);
 	printf("\tkernelsz: 0x%04x\n", s->kernelsize);
 	printf("\tconsole: %d\n", s->console);
@@ -65,7 +73,7 @@ static void syspage_dump(syspage_t *s)
 
 int main(int argc, const char *argv[])
 {
-	int kfd, ofd, afd, appcnt, i;
+	int kfd, ofd, afd, appcnt, i, j;
 	char buff[256];
 	size_t cnt, offset = 0;
 	syspage_t *syspage;
@@ -130,6 +138,8 @@ int main(int argc, const char *argv[])
 		return -1;
 	}
 
+	syspage->pbegin = PADDR_BEGIN;
+	syspage->pend = PADDR_END;
 	syspage->kernel = 0;
 	syspage->kernelsize = offset;
 	syspage->console = strtoul(argv[3], NULL, 10);
@@ -161,7 +171,10 @@ int main(int argc, const char *argv[])
 		}
 
 		syspage->progs[i].end = offset + ADDR_OCRAM;
-		strncpy(syspage->progs[i].cmdline, argv[5 + i], sizeof(syspage->progs[i].cmdline));
+
+		for (j = strlen(argv[5 + i]); j >= 0 && argv[5 + i][j] != '/'; --j);
+
+		strncpy(syspage->progs[i].cmdline, argv[5 + i] + j + 1, sizeof(syspage->progs[i].cmdline));
 
 		printf("Processed app #%d \"%s\" (%u bytes)\n", i, argv[5 + i], syspage->progs[i].end - syspage->progs[i].start);
 
