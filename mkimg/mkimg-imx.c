@@ -147,7 +147,6 @@ int main(int argc, const char *argv[])
 	syspage->progssz = appcnt;
 
 	for (i = 0; i < appcnt; ++i) {
-		offset = (offset + SIZE_PAGE - 1) & ~(SIZE_PAGE - 1);
 		lseek(ofd, offset, SEEK_SET);
 
 		syspage->progs[i].start = offset + ADDR_OCRAM;
@@ -183,9 +182,13 @@ int main(int argc, const char *argv[])
 
 	printf("Total image size: %lu bytes (%s)\n", offset, offset < IMGSZ_MAX ? "OK" : "won't fit in OCRAM");
 
+	lseek(ofd, 0x400 + 36, SEEK_SET);
+	offset -= 0x400;
+	write(ofd, &offset, sizeof(offset));
+
 	printf("Writing syspage...\n");
 
-	lseek(ofd, 0, SEEK_SET);
+	lseek(ofd, 0x20, SEEK_SET);
 	cnt = sizeof(syspage_t) + appcnt * sizeof(syspage_program_t);
 
 	i = 0;
