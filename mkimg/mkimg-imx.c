@@ -183,7 +183,6 @@ int main(int argc, const char *argv[])
 	printf("Total image size: %lu bytes (%s)\n", offset, offset < IMGSZ_MAX ? "OK" : "won't fit in OCRAM");
 
 	lseek(ofd, 0x400 + 36, SEEK_SET);
-	offset -= 0x400;
 	write(ofd, &offset, sizeof(offset));
 
 	printf("Writing syspage...\n");
