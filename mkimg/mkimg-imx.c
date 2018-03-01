@@ -26,7 +26,7 @@
 #define IMGSZ_MAX 68 * 1024
 #define ADDR_OCRAM 0x00907000
 #define PADDR_BEGIN 0x80000000
-#define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024)
+#define PADDR_END (PADDR_BEGIN + 512 * 1024 * 1024 - 1)
 
 
 typedef struct {
