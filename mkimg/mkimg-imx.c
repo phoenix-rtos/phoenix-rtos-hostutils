@@ -26,7 +26,7 @@
 #define IMGSZ_MAX 68 * 1024
 #define ADDR_OCRAM 0x00907000
 #define PADDR_BEGIN 0x80000000
-#define PADDR_END (PADDR_BEGIN + 512 * 1024 * 1024 - 1)
+#define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024 - 1)
 
 
 typedef struct {
@@ -79,7 +79,7 @@ int main(int argc, const char *argv[])
 	syspage_t *syspage;
 
 	if (argc < 5) {
-		fprintf(stderr, "Usage: %s [kernel img] [output file] [console] [arguments] [app 1, app 2, ...]\n", argv[0]);
+		fprintf(stderr, "Usage: %s [kernel binary image] [output file] [console] [arguments] [app1, app2, ...]\n", argv[0]);
 
 		return -1;
 	}
@@ -90,7 +90,7 @@ int main(int argc, const char *argv[])
 		return -1;
 	}
 
-	if ((ofd = open(argv[2], O_RDWR | O_TRUNC | O_CREAT)) < 0) {
+	if ((ofd = open(argv[2], O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP)) < 0) {
 		fprintf(stderr, "Could not open output file %s\n", argv[2]);
 
 		close(kfd);
