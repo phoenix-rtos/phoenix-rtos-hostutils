@@ -33,6 +33,7 @@ typedef enum {
 	PIPE,
 	UDP,
 	USB_VYBRID,
+	USB_IMX
 } dmode_t;
 
 /* Function reads and dispatches messages */
@@ -42,5 +43,6 @@ extern int (*msg_recv)(int fd, msg_t *msg, int *state);
 
 extern int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jump_addr);
 
+extern int usb_imx_dispatch(char *modules);
 
 #endif

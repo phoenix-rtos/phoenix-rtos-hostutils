@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * Copyright 2001, 2004 Pawel Pisarczyk
@@ -39,9 +39,9 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 	u8 t;
 	int fd, count, err;
 	u8 buff[BSP_MSGSZ];
-	
+
 	fprintf(stderr, "[%d] Starting phoenixd-child on %s\n", getpid(), tty);
-	
+
 	if ((fd = serial_open(tty, B460800)) < 0) {
 		fprintf(stderr, "[%d] Can't open %s [%d]!\n", getpid(), tty, fd);
 		return ERR_PHOENIXD_TTY;
@@ -54,7 +54,7 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 		}
 
 		switch (t) {
-		
+
 		/* Handle kernel request */
 		case BSP_TYPE_KDATA:
 			if (*(u8 *)buff != 0) {
@@ -62,15 +62,15 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 				break;
 			}
 			fprintf(stderr, "[%d] Sending kernel to %s\n", getpid(), tty);
-						
+
 			if ((err = bsp_sendkernel(fd, kernel)) < 0) {
 				fprintf(stderr, "[%d] Sending kernel error [%d]!\n", getpid(), err);
 				break;
 			}
 			break;
-		
+
 		/* Handle program request */
-		case BSP_TYPE_PDATA:	
+		case BSP_TYPE_PDATA:
 			fprintf(stderr, "[%d] Load program request on %s, program=%s\n", getpid(), tty, &buff[2]);
 			if ((err = bsp_sendprogram(fd, (char*)&buff[2], sysdir)) < 0)
 				fprintf(stderr, "[%d] Sending program error [%d]!\n", getpid(), err);
@@ -91,14 +91,14 @@ int main(int argc, char *argv[])
 	mode_t mode[8] = {SERIAL};
 	int k, i = 0;
 	int res, st;
-	
+
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
-	
-	while (1) {	
-		c = getopt(argc, argv, "k:p:s:1m:i:u:");
+
+	while (1) {
+		c = getopt(argc, argv, "k:p:s:1m:i:u:l:");
 		if (c < 0)
-			break; 				
-		
+			break;
+
 		switch (c) {
 		case 'k':
 			kernel = optarg;
@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
 		case '1':
 			bspfl = 1;
 			break;
-	
+
 		case 'm':
 			if (i < 8) {
 				mode[i] = PIPE;
@@ -135,12 +135,14 @@ int main(int argc, char *argv[])
 			mode[i] = USB_VYBRID;
 			ttys[i++] = optarg; /* Load address */
 			break;
-
+		case 'l':
+			mode[i] = USB_IMX;
+			ttys[i++] = optarg;
 		default:
 			break;
 		}
 	}
-		
+
 	if (!i) {
 		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n");
 		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
@@ -163,6 +165,8 @@ int main(int argc, char *argv[])
 					*jumAddr++ = '\0';
 
 				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr);
+			} else if (mode[k] == USB_IMX) {
+				res = usb_imx_dispatch(ttys[k]);
 			} else {
 				unsigned speed_port = 0;
 
@@ -184,7 +188,7 @@ int main(int argc, char *argv[])
 				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
 			return res;
-		}	
+		}
 	}
 
 	for (k = 0; k < i; k++)
