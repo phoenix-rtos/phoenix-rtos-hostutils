@@ -27,6 +27,7 @@
 typedef struct _mod_t {
 	size_t size;
 	char *name;
+	char *args;
 	void *data;
 } mod_t;
 
@@ -97,7 +98,7 @@ mod_t *load_module(char *path)
 	}
 
 	if (offs != mod->size) {
-		printf("Read rrror: Read %lu bytes instead of %lu.\n", offs, mod->size);
+		printf("Read error: Read %lu bytes instead of %lu.\n", offs, mod->size);
 		close(mod_fd);
 		return NULL;
 	}
@@ -108,12 +109,26 @@ mod_t *load_module(char *path)
 
 int send_module(libusb_device_handle *dev, mod_t *mod)
 {
-	int sent;
+	int sent = 0;
+	int argsz = 0;
 
 	libusb_control_transfer(dev, 0x00, 0xff, mod->size >> 16, mod->size, (unsigned char *)mod->name, strlen(mod->name) + 1, 5000);
 
 	if (libusb_claim_interface(dev, 0)) {
 		printf("Interface claiming error: %s\n", strerror(errno));
+		return 1;
+	}
+
+	if (mod->args != NULL)
+		argsz = strlen(mod->args) + 1;
+
+	if (argsz > 128) {
+		printf("Argument list is too long\n");
+		argsz = 128;
+	}
+
+	if (libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000) != 0) {
+		printf("Arguments transfer error: %s\n", mod->name);
 		return 1;
 	}
 
@@ -128,7 +143,8 @@ int send_module(libusb_device_handle *dev, mod_t *mod)
 
 int usb_imx_dispatch(char *modules)
 {
-	char *tok;
+	char *mod_tok, *arg_tok;
+	char *mod_p, *arg_p;
 	mod_t *mod;
 	libusb_device_handle *dev = NULL;
 
@@ -136,8 +152,6 @@ int usb_imx_dispatch(char *modules)
 		printf("No modules to load\n");
 		return 1;
 	}
-
-	printf("Modules to load: %s\n", modules);
 
 	if (libusb_init(NULL)) {
 		printf("libusb error\n");
@@ -150,27 +164,33 @@ int usb_imx_dispatch(char *modules)
 
 	printf("\rDevice found             \n");
 
-	tok = strtok(modules, ",");
+	mod_tok = strtok_r(modules, " ", &mod_p);
 
-	if (tok == NULL)
-		tok = modules;
+	if (mod_tok == NULL)
+		mod_tok = modules;
 
-	while (tok != NULL) {
+	while (mod_tok != NULL) {
 
-		if ((mod = load_module(tok)) == NULL) {
+		arg_tok = strtok_r(mod_tok, "=", &arg_p);
+
+		if ((mod = load_module(arg_tok)) == NULL) {
+			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			libusb_close(dev);
 			libusb_exit(NULL);
 			return 1;
 		}
 
+		mod->args = strtok_r(NULL, "=", &arg_p);
+
 		if (send_module(dev, mod)) {
+			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			libusb_close(dev);
 			libusb_exit(NULL);
 			return 1;
 		}
 
 		free(mod);
-		tok = strtok(NULL, ",");
+		mod_tok = strtok_r(NULL, " ", &mod_p);
 	}
 
 	libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);

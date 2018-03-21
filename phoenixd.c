@@ -84,6 +84,8 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 int main(int argc, char *argv[])
 {
 	int c;
+	int ind;
+	int len;
 	char bspfl = 0;
 	char *kernel = "../kernel/phoenix";
 	char *sysdir = "../sys";
@@ -137,7 +139,22 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			mode[i] = USB_IMX;
-			ttys[i++] = optarg;
+			ind = optind - 1;
+			len = 0;
+			while (ind < argc && *argv[ind] != '-') {
+				len += strlen(argv[ind]) + 1;
+				ind++;
+			}
+			ttys[i++] = malloc(len);
+			ind = optind - 1;
+			len = 0;
+			while (ind < argc && *argv[ind] != '-') {
+				sprintf(ttys[i - 1] + len, "%s ", argv[ind]);
+				len += strlen(argv[ind]) + 1;
+				ind++;
+			}
+			ttys[i - 1][len - 1] = '\0';
+			break;
 		default:
 			break;
 		}
@@ -167,6 +184,7 @@ int main(int argc, char *argv[])
 				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr);
 			} else if (mode[k] == USB_IMX) {
 				res = usb_imx_dispatch(ttys[k]);
+				free(ttys[k]);
 			} else {
 				unsigned speed_port = 0;
 
