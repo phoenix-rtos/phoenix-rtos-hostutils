@@ -88,8 +88,11 @@ mod_t *load_module(char *path)
 	}
 
 	offs = 0;
-	while ((br = read(mod_fd, mod->data + offs, 1024)) > 0)
+	br = 1;
+	while (br > 0 && offs < mod->size) {
+		br = read(mod_fd, mod->data + offs, mod->size - offs > 1024 ? 1024 : mod->size - offs);
 		offs += br;
+	}
 
 	if (br < 0) {
 		printf("Read error: %s\n", strerror(errno));
@@ -188,7 +191,8 @@ int usb_imx_dispatch(char *modules)
 			libusb_exit(NULL);
 			return 1;
 		}
-
+		free(mod->data);
+		free(mod->name);
 		free(mod);
 		mod_tok = strtok_r(NULL, " ", &mod_p);
 	}

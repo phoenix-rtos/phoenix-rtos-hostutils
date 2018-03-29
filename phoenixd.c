@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
 				len += strlen(argv[ind]) + 1;
 				ind++;
 			}
-			ttys[i++] = malloc(len);
+			ttys[i++] = malloc(len + 1);
 			ind = optind - 1;
 			len = 0;
 			while (ind < argc && *argv[ind] != '-') {
@@ -206,7 +206,8 @@ int main(int argc, char *argv[])
 				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
 			return res;
-		}
+		} else
+			free(ttys[k]);
 	}
 
 	for (k = 0; k < i; k++)
