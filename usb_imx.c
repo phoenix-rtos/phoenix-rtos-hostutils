@@ -38,9 +38,14 @@ char *strip_path(char *path)
 	size_t len = strlen(path);
 	size_t idx = len - 1;
 
-	while(path[idx] != '/')
+	if (len == 0)
+		return NULL;
+
+	while (idx && path[idx] != '/')
 		idx--;
-	idx++;
+
+	if (path[idx] == '/')
+		idx++;
 
 	sz = len - idx;
 
