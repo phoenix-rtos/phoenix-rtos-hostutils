@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <stdlib.h>
+#include <getopt.h>
 
 #include "types.h"
 #include "errors.h"
@@ -88,16 +89,33 @@ int main(int argc, char *argv[])
 	int len;
 	char bspfl = 0;
 	char *kernel = "../kernel/phoenix";
+
+	int sdp = 0;
+	int help = 0;
+	int opt_idx = 0;
+	char *initrd = NULL;
+	char *console = NULL;
+	char *append = NULL;
+
 	char *sysdir = "../sys";
 	char *ttys[8];
 	mode_t mode[8] = {SERIAL};
 	int k, i = 0;
 	int res, st;
 
+	struct option long_opts[] = {
+		{"sdp", no_argument, &sdp, 1},
+		{"kernel", required_argument, 0, 'k'},
+		{"console", required_argument, 0, 'c'},
+		{"initrd", required_argument, 0, 'I'},
+		{"append", required_argument, 0, 'a'},
+		{"help", no_argument, &help, 1},
+		{0, 0, 0, 0}};
+
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 
 	while (1) {
-		c = getopt(argc, argv, "k:p:s:1m:i:u:l:");
+		c = getopt_long(argc, argv, "k:p:s:1m:i:u:l:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
@@ -137,37 +155,58 @@ int main(int argc, char *argv[])
 			mode[i] = USB_VYBRID;
 			ttys[i++] = optarg; /* Load address */
 			break;
-		case 'l':
-			mode[i] = USB_IMX;
+		case 'a':
 			ind = optind - 1;
 			len = 0;
 			while (ind < argc && *argv[ind] != '-') {
 				len += strlen(argv[ind]) + 1;
 				ind++;
 			}
-			ttys[i++] = malloc(len + 1);
+			append = malloc(len + 1);
 			ind = optind - 1;
 			len = 0;
 			while (ind < argc && *argv[ind] != '-') {
-				sprintf(ttys[i - 1] + len, "%s ", argv[ind]);
+				sprintf(append + len, "%s ", argv[ind]);
 				len += strlen(argv[ind]) + 1;
 				ind++;
 			}
-			ttys[i - 1][len - 1] = '\0';
+			append[len - 1] = '\0';
+			break;
+		case 'I':
+			initrd = optarg;
+			break;
+		case 'c':
+			console = optarg;
 			break;
 		default:
 			break;
 		}
 	}
 
-	if (!i) {
+	if (sdp) {
+		res = usb_imx_dispatch(kernel, console, initrd, append);
+		free(append);
+		return 0;
+	}
+
+	if ((!i && !sdp) || help) {
 		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n");
 		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
 				"-p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]"
 				"-i ip_addr:port [ [-i ip_addr:port] ... ]"
 				" -u [load_addr[:jump_addr]]\n");
+
+		printf("\n\nFor imx6ull:\n\n"
+				"--sdp\t\t- specifies protocol (mandatory, no argument)\n"
+				"--kernel, -k\t- kernel image path (mandatory)\n"
+				"--console, -c\t- console server path (mandatory)\n"
+				"--initrd, -I\t- rootfs server path (mandatory)\n"
+				"--append, -a\t- path to servers appended to initrd with optional arguments,\n"
+				"\t\t  prefix path with F to fetch or X to fetch and execute\n"
+				"\t\t  example: --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n");
 		return -1;
 	}
+
 	for (k = 0; k < i; k++) {
 		res = fork();
 		if(res < 0) {
@@ -181,10 +220,7 @@ int main(int argc, char *argv[])
 				if ((jumAddr = strchr(ttys[k], ':')) != NULL)
 					*jumAddr++ = '\0';
 
-				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr);
-			} else if (mode[k] == USB_IMX) {
-				res = usb_imx_dispatch(ttys[k]);
-				free(ttys[k]);
+				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr, NULL, 0);
 			} else {
 				unsigned speed_port = 0;
 
@@ -206,8 +242,8 @@ int main(int argc, char *argv[])
 				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
 			return res;
-		} else
-			free(ttys[k]);
+		} //else
+			//free(ttys[k]);
 	}
 
 	for (k = 0; k < i; k++)

@@ -70,38 +70,40 @@ void print_cmd(unsigned char* b)
 
 static int open_vybrid(libusb_device_handle** h)
 {
-	libusb_device **list=0;
+	libusb_device **list = 0;
 	struct libusb_device_descriptor desc;
-	ssize_t i,cnt;
-	int rc,retval=0;
+	ssize_t i, cnt;
+	int rc, retval = 0;
 
 	cnt = libusb_get_device_list(0, &list);
 
-	if(cnt < 0)
-		fprintf(stderr,"usb_vybrid_dispatch: Error getting device list\n");
+	if (cnt < 0)
+		fprintf(stderr,"Error getting device list\n");
 
 	for (i = 0; i < cnt; i++) {
-		if(LIBUSB_SUCCESS!=(rc=libusb_get_device_descriptor(list[i],&desc))) {
-			fprintf(stderr, "usb_vybrid_dispatch: Failed to get device descriptor (%s)\n",libusb_error_name(rc));
+		if (LIBUSB_SUCCESS != (rc = libusb_get_device_descriptor(list[i], &desc))) {
+			fprintf(stderr, "Failed to get device descriptor (%s)\n", libusb_error_name(rc));
 			continue;
 		}
-		if (desc.idVendor==0x15a2) {
-			if ((desc.idProduct==0x0080) || (desc.idProduct==0x007d) || (desc.idProduct==0x006a))
-				printf("usb_vybrid_dispatch: Found supported device\n");
+		if (desc.idVendor == 0x15a2) {
+			if ((desc.idProduct == 0x0080) || (desc.idProduct == 0x007d) || (desc.idProduct == 0x006a))
+				printf("Found supported device\n");
 			else
-				printf("usb_vybrid_dispatch: Found unsuported product of known vendor, trying standard settings for this device\n");
+				printf("Found unsuported product of known vendor, trying standard settings for this device\n");
 
-			if(LIBUSB_SUCCESS!=(rc=libusb_open(list[i],h))) {
-				fprintf(stderr,"usb_vybrid_dispatch: Failed to open device (%s)\n",libusb_error_name(rc));
+			if (LIBUSB_SUCCESS != (rc = libusb_open(list[i], h))) {
+				fprintf(stderr,"Failed to open device (%s)\n", libusb_error_name(rc));
 				continue;
 			} else {
-				retval=1;
+				retval = 1;
 				break;
 			}
 		}
 	}
 
-	if(list) libusb_free_device_list(list, 1);
+	if (list)
+		libusb_free_device_list(list, 1);
+
 	return retval;
 }
 
@@ -179,6 +181,44 @@ END:
 	return rc;
 }
 
+int load_image(struct libusb_device_handle *h, void *image, ssize_t size, uint32_t  addr)
+{
+	int n,rc;
+	ssize_t offset = 0;
+	unsigned char b[BUF_SIZE]={0};
+
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, size);
+	//print_cmd(b+1);
+	if ((rc = control_transfer(h, b, CMD_SIZE)) < 0) {
+		fprintf(stderr,"Failed to send write_file command (%s)\n",libusb_error_name(rc));
+		goto END;
+	}
+
+	b[0] = 2;
+	while (offset < size) {
+		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
+		memcpy(b + 1, image + offset, n);
+		offset += n;
+		if((rc = control_transfer(h, b, n + 1)) < 0) {
+			fprintf(stderr,"Failed to send image contents (%s)\n",libusb_error_name(rc));
+			goto END;
+		}
+	}
+
+	//Receive report 3
+	if (((rc = interrupt_transfer(h, b, BUF_SIZE, &n)) < 0) || n != 5) {
+		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)\n",libusb_error_name(rc),n);
+		rc = -1;
+		goto END;
+	}
+	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
+	if (((rc = interrupt_transfer(h, b, BUF_SIZE, &n)) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+			fprintf(stderr,"Failed to receive complete status (%s,status=%02x%02x%02x%02x)\n",libusb_error_name(rc),b[1],b[2],b[3],b[4]);
+
+END:
+	return rc;
+}
 
 int jmp_2_addr(libusb_device_handle* h,uint32_t addr)
 {
@@ -258,67 +298,80 @@ END:
 }
 
 
-int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr)
+int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *image, ssize_t size)
 {
 	int rc;
 	libusb_device_handle *h = 0;
-	int kernel_attached=0;
+//	int kernel_attached = 0;
 
 	libusb_init(0);
 
-	printf("Starting Vybrid usb loader.\nWaiting for compatible USB device to be discovered ...\n");
+	printf("Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
 	while(1){
 		if(open_vybrid(&h) == 0)
 			continue;
 
-		printf("usb_vybrid_dispatch: Connection with Vybrid initialized\n");
 		if(libusb_kernel_driver_active(h,0) > 0){
-			kernel_attached=1;
+//			kernel_attached=1;
 			libusb_detach_kernel_driver(h,0);
 		}
-
 		if((rc = libusb_claim_interface(h,0)) < 0) {
-			fprintf(stderr,"usb_vybrid_dispatch: Failed to claim device interface (%s)\n",libusb_error_name(rc));
+			fprintf(stderr,"Failed to claim device interface (%s)\n",libusb_error_name(rc));
 			continue;
 		}
 
 		if((rc = do_status(h)) != 0) {
-			fprintf(stderr,"usb_vybrid_dispatch: Device failure\n");
+			fprintf(stderr,"Device failure\n");
 			continue;
 		}
-		uint32_t load_addr = 0;
-		if(loadAddr != NULL)
-			load_addr = strtoul(loadAddr,NULL,16);
-		if(load_addr == 0)
-			load_addr = 0x3f000000;
-		printf("Writing to %X\n", load_addr);
 
-		if((rc = load_file(h,kernel,load_addr)) != 0) {
-			fprintf(stderr,"usb_vybrid_dispatch: Failed to load file to device\n");
-			continue;
+		uint32_t load_addr = 0;
+		if (kernel != NULL && image == NULL && size == 0) {
+			if (loadAddr != NULL)
+				load_addr = strtoul(loadAddr, NULL, 16);
+			if (load_addr == 0)
+				load_addr = 0x3f000000;
+
+			if((rc = load_file(h,kernel,load_addr)) != 0) {
+				fprintf(stderr,"Failed to load file to device\n");
+				continue;
+			}
+		} else {
+			if (loadAddr != NULL)
+				load_addr = *(uint32_t *)loadAddr;
+			if (load_addr == 0)
+				load_addr = 0x3f000000;
+			if ((rc = load_image(h, image, size, load_addr)) != 0) {
+				fprintf(stderr,"Failed to load image to device\n");
+				continue;
+			}
 		}
-		printf("usb_vybrid_dispatch: Image file loaded.\n");
+		printf("Image file loaded.\n");
 
 		uint32_t jump_addr = 0;
-		if(jumpAddr != NULL)
-			jump_addr = strtoul(jumpAddr,NULL,16);
+		if (kernel != NULL && image == NULL && size == 0) {
+			if(jumpAddr != NULL)
+				jump_addr = strtoul(jumpAddr,NULL,16);
+		} else {
+			if(jumpAddr != NULL)
+				jump_addr = *(uint32_t *)jumpAddr;
+		}
 		if(jump_addr == 0)
 			jump_addr = 0x3f000400;
-
 		if((rc = jmp_2_addr(h,jump_addr)) != 0) {
-			fprintf(stderr,"usb_vybrid_dispatch: Failed to send jump command to device (%d)\n",rc);
+			fprintf(stderr,"Failed to send jump command to device (%d)\n",rc);
 			continue;
 		}
-		printf("usb_vybrid_dispatch: Code execution started.\n");
+		printf("Code execution started.\n");
 
 		libusb_release_interface(h,0);
-		if(kernel_attached)
-			libusb_attach_kernel_driver(h,0);
+//		if(kernel_attached)
+//			libusb_attach_kernel_driver(h,0);
 
 		break;
 	}
 
-	printf("Closing Vybrid usb loader\n");
+	printf("Closing usb loader\n");
 	if(h) libusb_close(h);
 	libusb_exit(0);
 	return rc;

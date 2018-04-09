@@ -24,6 +24,39 @@
 
 #include <libusb-1.0/libusb.h>
 
+#include "dispatch.h"
+
+#define SIZE_PAGE 0x1000
+#define SYSPAGESZ_MAX 0x400
+#define IMGSZ_MAX 68 * 1024
+#define ADDR_OCRAM 0x00907000
+#define PADDR_BEGIN 0x80000000
+#define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024 - 1)
+
+
+typedef struct {
+	uint32_t start;
+	uint32_t end;
+
+	char cmdline[16];
+} syspage_program_t;
+
+
+typedef struct {
+	uint32_t pbegin;
+	uint32_t pend;
+
+	uint32_t kernel;
+	uint32_t kernelsize;
+
+	uint32_t console;
+	char arg[256];
+
+	uint32_t progssz;
+	syspage_program_t progs[0];
+} syspage_t;
+
+
 typedef struct _mod_t {
 	size_t size;
 	char *name;
@@ -31,37 +64,40 @@ typedef struct _mod_t {
 	void *data;
 } mod_t;
 
-char *strip_path(char *path)
+
+char *base_name(char *path)
 {
 	char *mod_name;
 	size_t sz;
 	size_t len = strlen(path);
-	size_t idx = len - 1;
+	int i;
 
 	if (len == 0)
 		return NULL;
 
-	while (idx && path[idx] != '/')
-		idx--;
+	for (i = len; i >= 0 && path[i] != '/'; i--);
 
-	if (path[idx] == '/')
-		idx++;
+	i++;
+	sz = len - i;
 
-	sz = len - idx;
-
-	if (sz > 63)
-		sz = 63;
+	/* max name lenght */
+	if (sz > 62)
+		sz = 62;
 
 	if (!sz)
 		return NULL;
 
-	mod_name = malloc(sz + 1);
+	mod_name = malloc(sz + 2);
+	if (path[0] == 'X')
+		mod_name[0] = path[0];
+	else
+		mod_name[0] = 'F';
 
-	strncpy(mod_name, path + idx, sz);
-	mod_name[sz] = '\0';
-
+	strncpy(mod_name + 1, path + i, sz);
+	mod_name[sz + 1] = '\0';
 	return mod_name;
 }
+
 
 mod_t *load_module(char *path)
 {
@@ -69,8 +105,12 @@ mod_t *load_module(char *path)
 	int mod_fd;
 	struct stat mod_stat;
 	size_t offs, br;
+	int i = 0;
 
-	if ((mod_fd = open(path, O_RDONLY)) < 0) {
+	if (path[0] == 'X' || path[0] == 'F')
+		i++;
+
+	if ((mod_fd = open(path + i, O_RDONLY)) < 0) {
 		printf("Cannot open file %s: %s\n", path, strerror(errno));
 		return NULL;
 	}
@@ -84,7 +124,7 @@ mod_t *load_module(char *path)
 	mod = malloc(sizeof(mod_t));
 
 	mod->size = mod_stat.st_size;
-	mod->name = strip_path(path);
+	mod->name = base_name(path);
 	mod->data = malloc(mod->size);
 
 	if (mod->data == NULL) {
@@ -115,10 +155,12 @@ mod_t *load_module(char *path)
 	return mod;
 }
 
+
 int send_module(libusb_device_handle *dev, mod_t *mod)
 {
 	int sent = 0;
 	int argsz = 0;
+	int err = 0;
 
 	libusb_control_transfer(dev, 0x00, 0xff, mod->size >> 16, mod->size, (unsigned char *)mod->name, strlen(mod->name) + 1, 5000);
 
@@ -134,14 +176,13 @@ int send_module(libusb_device_handle *dev, mod_t *mod)
 		printf("Argument list is too long\n");
 		argsz = 128;
 	}
-
-	if (libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000) != 0) {
-		printf("Arguments transfer error: %s\n", mod->name);
+	if ((err = libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000)) != 0) {
+		printf("Arguments transfer error: %s %s\n", mod->name, libusb_error_name(err));
 		return 1;
 	}
 
-	if (libusb_bulk_transfer(dev, 1, mod->data, mod->size, &sent, 5000) != 0) {
-		printf("Transfer error: %s\n", mod->name);
+	if ((err = libusb_bulk_transfer(dev, 1, mod->data, mod->size, &sent, 5000)) != 0) {
+		printf("Transfer error: %s should be: %lu sent: %d (%s)\n", mod->name, mod->size, sent, libusb_error_name(err));
 		return 1;
 	}
 
@@ -149,28 +190,211 @@ int send_module(libusb_device_handle *dev, mod_t *mod)
 	return 0;
 }
 
-int usb_imx_dispatch(char *modules)
+
+static void syspage_dump(syspage_t *s)
+{
+	int i;
+
+	printf("\nSyspage:\n");
+	printf("\tpaddr begin: 0x%04x\n", s->pbegin);
+	printf("\tpaddr end: 0x%04x\n", s->pend);
+	printf("\tkernel: 0x%04x\n", s->kernel);
+	printf("\tkernelsz: 0x%04x\n", s->kernelsize);
+	printf("\tconsole: %d\n", s->console);
+	printf("\tArgument: %s\n", s->arg);
+	printf("\nPrograms (%u):\n", s->progssz);
+
+	for (i = 0; i < s->progssz; ++i) {
+		printf("\t%s: s: 0x%04x e: 0x%04x\n", s->progs[i].cmdline, s->progs[i].start, s->progs[i].end);
+	}
+}
+
+
+int boot_image(char *kernel, char *initrd)
+{
+	int kfd, ifd, i, j;
+	void *image;
+	ssize_t size;
+	struct stat kstat, istat;
+	size_t cnt, offset = 0;
+	uint32_t jump_addr, load_addr;
+	syspage_t *syspage;
+
+	if ((kfd = open(kernel, O_RDONLY)) < 0) {
+		fprintf(stderr, "Could not open kernel binary %s\n", kernel);
+		return -1;
+	}
+
+	if (fstat(kfd, &kstat) != 0) {
+		printf("File stat error: %s\n", strerror(errno));
+		close(kfd);
+		return -1;
+	}
+
+	if ((ifd = open(initrd, O_RDONLY)) < 0) {
+		fprintf(stderr, "Could not open file %s\n", initrd);
+		close(kfd);
+		return -1;
+	}
+
+	if (fstat(ifd, &istat) != 0) {
+		printf("File stat error: %s\n", strerror(errno));
+		close(kfd);
+		close(ifd);
+		return -1;
+	}
+
+	size = kstat.st_size + istat.st_size;
+
+	image = malloc(size);
+
+	if (image == NULL) {
+		fprintf(stderr, "Could not allocate %lu bytes for image\n", size);
+		return -1;
+	}
+
+	while (1) {
+		cnt = read(kfd, image + offset, 256);
+		if (!cnt)
+			break;
+		if (offset == 0x400) {
+			jump_addr = *(uint32_t *)(image + offset + 20); //ivt self ptr
+			load_addr = *(uint32_t *)(image + offset + 32); //ivt load address
+		}
+		offset += cnt;
+	}
+
+	close(kfd);
+
+	printf("Processed kernel image (%lu bytes)\n", offset);
+
+	if (offset < SYSPAGESZ_MAX) {
+		fprintf(stderr, "Kernel's too small\n");
+		free(image);
+		close(ifd);
+		return -1;
+	}
+
+	if ((syspage = malloc(sizeof(syspage_t) + sizeof(syspage_program_t))) == NULL) {
+		fprintf(stderr, "Could not allocate %lu bytes for syspage\n", sizeof(syspage_t) + sizeof(syspage_program_t));
+		free(image);
+		close(ifd);
+		return -1;
+	}
+
+	syspage->pbegin = PADDR_BEGIN;
+	syspage->pend = PADDR_END;
+	syspage->kernel = 0;
+	syspage->kernelsize = offset;
+	syspage->console = 0;
+	strncpy(syspage->arg, "", sizeof(syspage->arg));
+	syspage->progssz = 1;
+
+
+	syspage->progs[0].start = offset + ADDR_OCRAM;
+
+	if ((ifd = open(initrd, O_RDONLY)) < 0) {
+		fprintf(stderr, "Can't open initrd file %s\n", initrd);
+		free(syspage);
+		return -1;
+	}
+
+	while (1) {
+		cnt = read(ifd, image + offset, 256);
+		if (!cnt)
+			break;
+		offset += cnt;
+	}
+
+	syspage->progs[0].end = offset + ADDR_OCRAM;
+
+	for (j = strlen(initrd); j >= 0 && initrd[j] != '/'; --j);
+
+	strncpy(syspage->progs[0].cmdline, initrd + j + 1, sizeof(syspage->progs[i].cmdline));
+
+	printf("Processed initrd \"%s\" (%u bytes)\n", initrd, syspage->progs[0].end - syspage->progs[0].start);
+
+	close(ifd);
+	memcpy(image + 0x400 + 36, &offset, sizeof(offset));
+	printf("Writing syspage...\n");
+
+	cnt = sizeof(syspage_t) + sizeof(syspage_program_t);
+
+	memcpy(image + 0x20, (void *)syspage, cnt);
+
+	syspage_dump(syspage);
+
+	free(syspage);
+
+	printf("\nTotal image size: %lu bytes (%s)\n\n", offset, offset < IMGSZ_MAX ? "\033[32;1mOK\033[0m" : "\033[31;1mwon't fit in OCRAM\033[0m");
+
+	if (offset >= IMGSZ_MAX) {
+		free(image);
+		return -1;
+	}
+/*
+	int ofd;
+	if ((ofd = open("test.img", O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP)) < 0) {
+		fprintf(stderr, "Could not open output file test.img\n");
+		return -1;
+	}
+
+	offset = 0;
+	while (offset < size) {
+		cnt = write(ofd, image + offset, 256 > size - offset ? size - offset : 256);
+		offset += cnt;
+	}
+
+	close(ofd);
+*/
+	usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, size);
+
+	free(image);
+	return 0;
+}
+
+
+int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 {
 	char *mod_tok, *arg_tok;
 	char *mod_p, *arg_p;
+	char *modules;
 	mod_t *mod;
 	libusb_device_handle *dev = NULL;
 
-	if (!strlen(modules)) {
-		printf("No modules to load\n");
+	if (boot_image(kernel, initrd)) {
+		//usleep(5000000);
+		printf("Image booting error. Exiting...\n");
+		return -1;
+	}
+
+	if (console == NULL || !strlen(console)) {
+		printf("No console specified\n");
 		return 1;
 	}
+
 
 	if (libusb_init(NULL)) {
 		printf("libusb error\n");
 		return 1;
 	}
 
-	printf("Waiting for the device...");
+	printf("Waiting for the device to boot...");
 	fflush(stdout);
 	while ((dev = libusb_open_device_with_vid_pid(NULL, 0x15a2, 0x007d)) == NULL);
 
-	printf("\rDevice found             \n");
+	printf("\rDevice booted                    \n");
+
+	modules = malloc(strlen(console) + (append != NULL ? strlen(append) : 0) + 3);
+	memset(modules, 0, strlen(console) + (append != NULL ? strlen(append) : 0) + 3);
+	modules[0] = 'X';
+	strcat(modules, console);
+	if (append != NULL && strlen(append)) {
+		modules[strlen(console) + 1] = ' ';
+		strcat(modules, append);
+	}
+
+//	printf("modules %s\n", modules);
 
 	mod_tok = strtok_r(modules, " ", &mod_p);
 
@@ -194,6 +418,9 @@ int usb_imx_dispatch(char *modules)
 			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			libusb_close(dev);
 			libusb_exit(NULL);
+			free(mod->data);
+			free(mod->name);
+			free(mod);
 			return 1;
 		}
 		free(mod->data);
