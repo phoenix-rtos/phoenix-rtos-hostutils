@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 
 	while (1) {
-		c = getopt_long(argc, argv, "k:p:s:1m:i:u:l:", long_opts, &opt_idx);
+		c = getopt_long(argc, argv, "k:p:s:1m:i:u:a:c:I:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
