@@ -413,7 +413,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 			return 1;
 		}
 
-		mod->args = strtok_r(NULL, "=", &arg_p);
+		mod->args = strtok_r(NULL, " ", &arg_p);
 
 		if (send_module(dev, mod)) {
 			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
@@ -428,7 +428,6 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 		free(mod->data);
 		free(mod->name);
 		free(mod);
-		mod_tok = strtok_r(NULL, " ", &mod_p);
 	}
 
 	libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
