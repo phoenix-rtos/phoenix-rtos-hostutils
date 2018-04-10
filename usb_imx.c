@@ -409,6 +409,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			libusb_close(dev);
 			libusb_exit(NULL);
+			free(modules);
 			return 1;
 		}
 
@@ -418,6 +419,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			libusb_close(dev);
 			libusb_exit(NULL);
+			free(modules);
 			free(mod->data);
 			free(mod->name);
 			free(mod);
@@ -432,6 +434,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 	libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 	libusb_close(dev);
 	libusb_exit(NULL);
+	free(modules);
 	printf("Transfer complete\n");
 	return 0;
 }
