@@ -78,6 +78,8 @@ char *base_name(char *path)
 	for (i = len; i >= 0 && path[i] != '/'; i--);
 
 	i++;
+	if (i == 0 && (path[0] == 'X' || path[0] == 'F'))
+		i++;
 	sz = len - i;
 
 	/* max name lenght */
