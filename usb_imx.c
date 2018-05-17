@@ -359,6 +359,9 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 		return -1;
 	}
 
+	if (initrd == NULL)
+		return 0;
+
 	if (console == NULL || !strlen(console)) {
 		printf("No console specified\n");
 		return 1;
