@@ -231,18 +231,21 @@ int boot_image(char *kernel, char *initrd)
 		return -1;
 	}
 
-	if ((ifd = open(initrd, O_RDONLY)) < 0) {
-		fprintf(stderr, "Could not open file %s\n", initrd);
-		close(kfd);
-		return -1;
-	}
+	if (initrd != NULL) {
+		if ((ifd = open(initrd, O_RDONLY)) < 0) {
+			fprintf(stderr, "Could not open file %s\n", initrd);
+			close(kfd);
+			return -1;
+		}
 
-	if (fstat(ifd, &istat) != 0) {
-		printf("File stat error: %s\n", strerror(errno));
-		close(kfd);
+		if (fstat(ifd, &istat) != 0) {
+			printf("File stat error: %s\n", strerror(errno));
+			close(kfd);
+			close(ifd);
+			return -1;
+		}
 		close(ifd);
-		return -1;
-	}
+	} else istat.st_size = 0;
 
 	size = kstat.st_size + istat.st_size;
 
@@ -288,33 +291,35 @@ int boot_image(char *kernel, char *initrd)
 	syspage->kernelsize = offset;
 	syspage->console = 0;
 	strncpy(syspage->arg, "", sizeof(syspage->arg));
-	syspage->progssz = 1;
+	syspage->progssz = initrd ? 1 : 0;
 
+	if (initrd != NULL) {
+		syspage->progs[0].start = offset + ADDR_OCRAM;
 
-	syspage->progs[0].start = offset + ADDR_OCRAM;
+		if ((ifd = open(initrd, O_RDONLY)) < 0) {
+			fprintf(stderr, "Can't open initrd file %s\n", initrd);
+			free(syspage);
+			return -1;
+		}
 
-	if ((ifd = open(initrd, O_RDONLY)) < 0) {
-		fprintf(stderr, "Can't open initrd file %s\n", initrd);
-		free(syspage);
-		return -1;
+		while (1) {
+			cnt = read(ifd, image + offset, 256);
+			if (!cnt)
+				break;
+			offset += cnt;
+		}
+
+		syspage->progs[0].end = offset + ADDR_OCRAM;
+
+		for (j = strlen(initrd); j >= 0 && initrd[j] != '/'; --j);
+
+		strncpy(syspage->progs[0].cmdline, initrd + j + 1, sizeof(syspage->progs[i].cmdline));
+
+		printf("Processed initrd \"%s\" (%u bytes)\n", initrd, syspage->progs[0].end - syspage->progs[0].start);
+
+		close(ifd);
 	}
 
-	while (1) {
-		cnt = read(ifd, image + offset, 256);
-		if (!cnt)
-			break;
-		offset += cnt;
-	}
-
-	syspage->progs[0].end = offset + ADDR_OCRAM;
-
-	for (j = strlen(initrd); j >= 0 && initrd[j] != '/'; --j);
-
-	strncpy(syspage->progs[0].cmdline, initrd + j + 1, sizeof(syspage->progs[i].cmdline));
-
-	printf("Processed initrd \"%s\" (%u bytes)\n", initrd, syspage->progs[0].end - syspage->progs[0].start);
-
-	close(ifd);
 	memcpy(image + 0x400 + 36, &offset, sizeof(offset));
 	printf("Writing syspage...\n");
 
@@ -332,21 +337,7 @@ int boot_image(char *kernel, char *initrd)
 		free(image);
 		return -1;
 	}
-/*
-	int ofd;
-	if ((ofd = open("test.img", O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH | S_IWUSR | S_IWGRP)) < 0) {
-		fprintf(stderr, "Could not open output file test.img\n");
-		return -1;
-	}
 
-	offset = 0;
-	while (offset < size) {
-		cnt = write(ofd, image + offset, 256 > size - offset ? size - offset : 256);
-		offset += cnt;
-	}
-
-	close(ofd);
-*/
 	usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, size);
 
 	free(image);
@@ -393,8 +384,6 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 		modules[strlen(console) + 1] = ' ';
 		strcat(modules, append);
 	}
-
-//	printf("modules %s\n", modules);
 
 	mod_tok = strtok_r(modules, " ", &mod_p);
 
