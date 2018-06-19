@@ -220,6 +220,7 @@ int boot_image(char *kernel, char *initrd, char *output)
 	struct stat kstat, istat;
 	size_t cnt, offset = 0;
 	uint32_t jump_addr, load_addr;
+	char *arg;
 	syspage_t *syspage;
 
 	if ((kfd = open(kernel, O_RDONLY)) < 0) {
@@ -234,6 +235,8 @@ int boot_image(char *kernel, char *initrd, char *output)
 	}
 
 	if (initrd != NULL) {
+		initrd = strtok(initrd, "=");
+		arg = strtok(NULL, "=");
 		if ((ifd = open(initrd, O_RDONLY)) < 0) {
 			fprintf(stderr, "Could not open file %s\n", initrd);
 			close(kfd);
@@ -292,7 +295,8 @@ int boot_image(char *kernel, char *initrd, char *output)
 	syspage->kernel = 0;
 	syspage->kernelsize = offset;
 	syspage->console = 0;
-	strncpy(syspage->arg, "", sizeof(syspage->arg));
+
+	strncpy(syspage->arg, arg ? arg : "", sizeof(syspage->arg));
 	syspage->progssz = initrd ? 1 : 0;
 
 	if (initrd != NULL) {
