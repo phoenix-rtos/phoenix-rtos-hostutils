@@ -96,6 +96,7 @@ int main(int argc, char *argv[])
 	char *initrd = NULL;
 	char *console = NULL;
 	char *append = NULL;
+	char *output = NULL;
 
 	char *sysdir = "../sys";
 	char *ttys[8];
@@ -110,6 +111,7 @@ int main(int argc, char *argv[])
 		{"initrd", required_argument, 0, 'I'},
 		{"append", required_argument, 0, 'a'},
 		{"help", no_argument, &help, 1},
+		{"output", required_argument, 0, 'o'},
 		{0, 0, 0, 0}};
 
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
@@ -178,9 +180,21 @@ int main(int argc, char *argv[])
 		case 'c':
 			console = optarg;
 			break;
+		case 'o':
+			output = optarg;
+			break;
 		default:
 			break;
 		}
+	}
+
+	if (output) {
+		if (!kernel || !initrd) {
+			printf("Output file needs kernel and initrd paths\n");
+			return 0;
+		}
+		res = boot_image(kernel, initrd, output);
+		return 0;
 	}
 
 	if (sdp) {

@@ -212,7 +212,7 @@ static void syspage_dump(syspage_t *s)
 }
 
 
-int boot_image(char *kernel, char *initrd)
+int boot_image(char *kernel, char *initrd, char *output)
 {
 	int kfd, ifd, i, j;
 	void *image;
@@ -339,8 +339,24 @@ int boot_image(char *kernel, char *initrd)
 		free(image);
 		return -1;
 	}
+	if (output == NULL)
+		usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, size);
+	else {
+		ifd = open(output, O_RDWR | O_TRUNC | O_CREAT);
 
-	usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, size);
+		if (ifd < 0) {
+			printf("Output file open error\n");
+			return -1;
+		}
+
+		i = 0;
+		while (size) {
+			i = write(ifd, (void *)image + i, size);
+			size -= i;
+		}
+		close(ifd);
+		chmod(output, S_IRUSR | S_IWUSR);
+	}
 
 	free(image);
 	return 0;
@@ -355,8 +371,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 	mod_t *mod;
 	libusb_device_handle *dev = NULL;
 
-	if (boot_image(kernel, initrd)) {
-		//usleep(5000000);
+	if (boot_image(kernel, initrd, NULL)) {
 		printf("Image booting error. Exiting...\n");
 		return -1;
 	}
