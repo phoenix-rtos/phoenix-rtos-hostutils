@@ -280,7 +280,7 @@ int do_status(struct libusb_device_handle* h)
 	set_status_cmd(b+1);
 	//print_cmd(b+1);
 	if((rc = control_transfer(h,b,CMD_SIZE)) < 0) {
-		fprintf(stderr,"Failed to send status command (%d,%s)\n",rc,libusb_error_name(n));
+		fprintf(stderr,"Failed to send status command (%d,%s)\n",rc,libusb_error_name(rc));
 		goto END;
 	}
 	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) < 0 || n != 5) {
@@ -301,6 +301,7 @@ END:
 int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *image, ssize_t size)
 {
 	int rc;
+	int err = 0;
 	libusb_device_handle *h = 0;
 //	int kernel_attached = 0;
 
@@ -308,8 +309,18 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 
 	printf("Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
 	while(1){
-		if(open_vybrid(&h) == 0)
+		if (err) {
+			usleep(500000);
+			if (err > 5)
+				return -1;
+		}
+		err++;
+
+		if(open_vybrid(&h) == 0) {
+			if (err)
+				err--;
 			continue;
+		}
 
 		if(libusb_kernel_driver_active(h,0) > 0){
 //			kernel_attached=1;
