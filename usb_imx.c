@@ -13,6 +13,8 @@
  * %LICENSE%
  */
 
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +32,7 @@
 #define SYSPAGESZ_MAX 0x400
 #define IMGSZ_MAX 68 * 1024
 #define ADDR_OCRAM 0x00907000
+#define ADDR_DDR 0x80000000
 #define PADDR_BEGIN 0x80000000
 #define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024 - 1)
 
@@ -64,6 +67,7 @@ typedef struct _mod_t {
 	void *data;
 } mod_t;
 
+extern int silent;
 
 char *base_name(char *path)
 {
@@ -172,9 +176,10 @@ int send_module(libusb_device_handle *dev, mod_t *mod)
 	}
 
 	if (mod->args != NULL)
-		argsz = strlen(mod->args) + 1;
+		argsz = strlen(mod->args);
 
 	if (argsz > 128) {
+		mod->args[argsz - 1] = 0;
 		printf("Argument list is too long\n");
 		argsz = 128;
 	}
@@ -211,17 +216,101 @@ static void syspage_dump(syspage_t *s)
 	}
 }
 
-
-int boot_image(char *kernel, char *initrd, char *output)
+int count_sysprogs(char *initrd, char *console, char *append, int *sysprogs_sz)
 {
-	int kfd, ifd, i, j;
+	int cnt = 0, sz = 0, pfd;
+	struct stat pstat;
+	char *progs, *prog;
+
+	asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ");
+	prog = strtok(progs, " ");
+
+	while (prog) {
+		if (!strlen(prog))
+			goto next;
+
+		cnt++;
+		if ((pfd = open(prog, O_RDONLY)) < 0) {
+			fprintf(stderr, "Could not open file %s\n", initrd);
+			goto next;
+		}
+
+		if (fstat(pfd, &pstat) != 0) {
+			printf("File stat error: %s\n", strerror(errno));
+			close(pfd);
+			goto next;
+		}
+		sz += pstat.st_size;
+		close(pfd);
+next:
+		prog = strtok(NULL, " ");
+	}
+
+	free(progs);
+	*sysprogs_sz = sz;
+	return cnt;
+}
+
+int append_sysprogs(void *image, char *initrd, char *console, char *append, syspage_t *syspage, size_t offset, unsigned int addr)
+{
+	int i = 0, j = 0, pfd, cnt;
+	char *progs, *prog;
+
+	asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ");
+	prog = strtok(progs, " ");
+
+	while (prog) {
+		if (!strlen(prog))
+			goto next;
+		syspage->progs[i].start = offset + addr;
+
+		if ((pfd = open(prog, O_RDONLY)) < 0) {
+			fprintf(stderr, "Can't open initrd file %s\n", initrd);
+			goto next;
+		}
+
+		while (1) {
+			cnt = read(pfd, image + offset, 256);
+			if (!cnt)
+				break;
+			offset += cnt;
+		}
+
+		syspage->progs[i].end = offset + addr;
+
+		for (j = strlen(prog); j >= 0 && prog[j] != '/'; --j);
+
+		strncpy(syspage->progs[i].cmdline, prog + j + 1, sizeof(syspage->progs[i].cmdline) - 1);
+
+		printf("Processed \"%s\" (%u bytes)\n", prog, syspage->progs[i].end - syspage->progs[i].start);
+
+		close(pfd);
+next:
+		prog = strtok(NULL, " ");
+		i++;
+	}
+	free(progs);
+	return offset;
+}
+
+int boot_image(char *kernel, char *initrd, char *console, char *append, char *output, int plugin)
+{
+	int kfd, ifd;
+	int err = 0;
 	void *image;
 	ssize_t size;
-	struct stat kstat, istat;
+	struct stat kstat;
 	size_t cnt, offset = 0;
 	uint32_t jump_addr, load_addr;
-	char *arg;
+	char *arg = NULL;
+	int plugin_sz = 0;
 	syspage_t *syspage;
+	int sysprogs_cnt = 0, sysprogs_sz = 0;
+	unsigned int addr = plugin ? ADDR_DDR : ADDR_OCRAM;
+
+
+	kernel = strtok(kernel, "=");
+	arg = strtok(NULL, "=");
 
 	if ((kfd = open(kernel, O_RDONLY)) < 0) {
 		fprintf(stderr, "Could not open kernel binary %s\n", kernel);
@@ -234,25 +323,9 @@ int boot_image(char *kernel, char *initrd, char *output)
 		return -1;
 	}
 
-	if (initrd != NULL) {
-		initrd = strtok(initrd, "=");
-		arg = strtok(NULL, "=");
-		if ((ifd = open(initrd, O_RDONLY)) < 0) {
-			fprintf(stderr, "Could not open file %s\n", initrd);
-			close(kfd);
-			return -1;
-		}
+	sysprogs_cnt = count_sysprogs(initrd, console, append, &sysprogs_sz);
 
-		if (fstat(ifd, &istat) != 0) {
-			printf("File stat error: %s\n", strerror(errno));
-			close(kfd);
-			close(ifd);
-			return -1;
-		}
-		close(ifd);
-	} else istat.st_size = 0;
-
-	size = kstat.st_size + istat.st_size;
+	size = kstat.st_size + sysprogs_sz;
 
 	image = malloc(size);
 
@@ -279,14 +352,12 @@ int boot_image(char *kernel, char *initrd, char *output)
 	if (offset < SYSPAGESZ_MAX) {
 		fprintf(stderr, "Kernel's too small\n");
 		free(image);
-		close(ifd);
 		return -1;
 	}
 
-	if ((syspage = malloc(sizeof(syspage_t) + sizeof(syspage_program_t))) == NULL) {
+	if ((syspage = malloc(sizeof(syspage_t) + (sysprogs_cnt * sizeof(syspage_program_t)))) == NULL) {
 		fprintf(stderr, "Could not allocate %lu bytes for syspage\n", sizeof(syspage_t) + sizeof(syspage_program_t));
 		free(image);
-		close(ifd);
 		return -1;
 	}
 
@@ -295,57 +366,51 @@ int boot_image(char *kernel, char *initrd, char *output)
 	syspage->kernel = 0;
 	syspage->kernelsize = offset;
 	syspage->console = 0;
-
 	strncpy(syspage->arg, arg ? arg : "", sizeof(syspage->arg));
-	syspage->progssz = initrd ? 1 : 0;
+	syspage->progssz = sysprogs_cnt;
 
-	if (initrd != NULL) {
-		syspage->progs[0].start = offset + ADDR_OCRAM;
+	offset = append_sysprogs(image, initrd, console, append, syspage, offset, addr);
 
-		if ((ifd = open(initrd, O_RDONLY)) < 0) {
-			fprintf(stderr, "Can't open initrd file %s\n", initrd);
-			free(syspage);
-			return -1;
-		}
+	if (plugin) {
+		plugin_sz = *(int *)(image + 0x424);
+		*(int *)(image + 0x424) = (plugin_sz + 0x199) & ~0x1ff;
+		memcpy(image + plugin_sz - 0xc, &offset, sizeof(offset));
+	} else
+		memcpy(image + 0x400 + 36, &offset, sizeof(offset));
 
-		while (1) {
-			cnt = read(ifd, image + offset, 256);
-			if (!cnt)
-				break;
-			offset += cnt;
-		}
-
-		syspage->progs[0].end = offset + ADDR_OCRAM;
-
-		for (j = strlen(initrd); j >= 0 && initrd[j] != '/'; --j);
-
-		strncpy(syspage->progs[0].cmdline, initrd + j + 1, sizeof(syspage->progs[i].cmdline));
-
-		printf("Processed initrd \"%s\" (%u bytes)\n", initrd, syspage->progs[0].end - syspage->progs[0].start);
-
-		close(ifd);
-	}
-
-	memcpy(image + 0x400 + 36, &offset, sizeof(offset));
 	printf("Writing syspage...\n");
 
-	cnt = sizeof(syspage_t) + sizeof(syspage_program_t);
+	cnt = sizeof(syspage_t) + (sysprogs_cnt * sizeof(syspage_program_t));
 
+	if (cnt > 0x380) {
+		printf("Syspage is too big (too many modules?)\n");
+		return -1;
+	}
 	memcpy(image + 0x20, (void *)syspage, cnt);
 
 	syspage_dump(syspage);
 
 	free(syspage);
 
-	printf("\nTotal image size: %lu bytes (%s)\n\n", offset, offset < IMGSZ_MAX ? "\033[32;1mOK\033[0m" : "\033[31;1mwon't fit in OCRAM\033[0m");
+	printf("\nTotal image size: %lu bytes.\n\n", offset);
 
-	if (offset >= IMGSZ_MAX) {
-		free(image);
-		return -1;
-	}
-	if (output == NULL)
-		usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, size);
-	else {
+	if (output == NULL) {
+		if (plugin) {
+			silent = 1;
+			printf("Waiting for USB connection...");
+			fflush(stdout);
+			err = usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, plugin_sz);
+			load_addr = 0x80000000;
+			jump_addr = 0x80000000 + plugin_sz - 0x30;
+			usleep(500000);
+			silent = 0;
+			printf("\r                              \r");
+			fflush(stdout);
+			if (err)
+				goto out;
+		}
+		usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, offset);
+	} else {
 		ifd = open(output, O_RDWR | O_TRUNC | O_CREAT);
 
 		if (ifd < 0) {
@@ -353,21 +418,22 @@ int boot_image(char *kernel, char *initrd, char *output)
 			return -1;
 		}
 
-		i = 0;
+		cnt = 0;
 		while (size) {
-			i = write(ifd, (void *)image + i, size);
-			size -= i;
+			cnt = write(ifd, (void *)image + cnt, size);
+			size -= cnt;
 		}
 		close(ifd);
 		chmod(output, S_IRUSR | S_IWUSR);
 	}
 
+out:
 	free(image);
-	return 0;
+	return err;
 }
 
 
-int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
+int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append, int plugin)
 {
 	char *mod_tok, *arg_tok;
 	char *mod_p, *arg_p;
@@ -375,7 +441,7 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append)
 	mod_t *mod;
 	libusb_device_handle *dev = NULL;
 
-	if (boot_image(kernel, initrd, NULL)) {
+	if (boot_image(kernel, initrd, NULL, NULL, NULL, plugin)) {
 		printf("Image booting error. Exiting...\n");
 		return -1;
 	}

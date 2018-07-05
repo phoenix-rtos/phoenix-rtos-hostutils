@@ -43,7 +43,7 @@ extern int (*msg_recv)(int fd, msg_t *msg, int *state);
 
 extern int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jump_addr, void *image, ssize_t size);
 
-extern int usb_imx_dispatch(char *kernel, char *uart, char *initrd, char *append);
-extern int boot_image(char *kernel, char *initrd, char *output);
+extern int usb_imx_dispatch(char *kernel, char *uart, char *initrd, char *append, int plugin);
+extern int boot_image(char *kernel, char *initrd, char *console, char *append, char *output, int plugin);
 
 #endif

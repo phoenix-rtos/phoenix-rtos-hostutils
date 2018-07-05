@@ -106,6 +106,8 @@ int main(int argc, char *argv[])
 
 	struct option long_opts[] = {
 		{"sdp", no_argument, &sdp, 1},
+		{"plugin", no_argument, &sdp, 2},
+		{"upload", no_argument, &sdp, 3},
 		{"kernel", required_argument, 0, 'k'},
 		{"console", required_argument, 0, 'c'},
 		{"initrd", required_argument, 0, 'I'},
@@ -193,12 +195,17 @@ int main(int argc, char *argv[])
 			printf("Output file needs kernel and initrd paths\n");
 			return 0;
 		}
-		res = boot_image(kernel, initrd, output);
+		res = boot_image(kernel, initrd, console, append, output, sdp == 2 ? 1 : 0);
 		return 0;
 	}
 
 	if (sdp) {
-		res = usb_imx_dispatch(kernel, console, initrd, append);
+		if (sdp == 1)
+			res = usb_imx_dispatch(kernel, console, initrd, append, 0);
+		else if (sdp == 2)
+			res = boot_image(kernel, initrd, console, append, NULL, 1);
+		else if (sdp == 3)
+			res = usb_imx_dispatch(kernel, console, initrd, append, 1);
 		free(append);
 		return 0;
 	}
@@ -210,14 +217,23 @@ int main(int argc, char *argv[])
 				"-i ip_addr:port [ [-i ip_addr:port] ... ]"
 				" -u [load_addr[:jump_addr]]\n");
 
-		printf("\n\nFor imx6ull:\n\n"
-				"--sdp\t\t- specifies protocol (mandatory, no argument)\n"
-				"--kernel, -k\t- kernel image path (mandatory)\n"
-				"--console, -c\t- console server path (mandatory)\n"
-				"--initrd, -I\t- rootfs server path (mandatory)\n"
+		printf("\nFor imx6ull:\n\n"
+				"Modes:\n"
+				"--sdp\t\t- Make image for older kernels version without plugin.\n"
+				"\t\t  Image will contain only kernel + initrd and it is limited to 68KB.\n"
+				"\t\t  It is expected initrd will download the rest of the modules (console + append).\n"
+				"--plugin\t- Make image with all modules in syspage for kernels with plugin. Image size is limited to 4MB.\n"
+				"\t\t  In this mode arguments are passed only to kernel e.g. <kernel_path>=\"app1;arg1;arg2 app2;arg1;arg2\".\n"
+				"--upload\t- Just like the sdp mode but for kernels with plugin. Image size is limited to 4MB.\n"
+				"\nArguments:\n"
+				"--kernel, -k\t- kernel image path\n"
+				"--console, -c\t- console server path\n"
+				"--initrd, -I\t- initrd server path\n"
 				"--append, -a\t- path to servers appended to initrd with optional arguments,\n"
-				"\t\t  prefix path with F to fetch or X to fetch and execute\n"
-				"\t\t  example: --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n");
+				"\t\t  prefix path with F to fetch or X to fetch and execute (only in sdp and upload modes)\n"
+				"\t\t  example: --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n"
+				"--output, -o\t- output file path. By default image is uploaded.\n"
+				"--help, -h\t- prints this message\n");
 		return -1;
 	}
 

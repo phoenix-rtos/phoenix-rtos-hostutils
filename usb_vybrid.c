@@ -19,6 +19,14 @@
 #define SET_DATA(b,v) *((uint32_t*)((b)+11))=htonl(v);
 #define SET_FORMAT(b,v) (b)[6]=(v);
 
+int silent = 0;
+
+#define dispatch_msg(silent, fmt, ...)		\
+	do {								\
+		if (!silent)					\
+			printf(fmt, ##__VA_ARGS__);		\
+	} while(0)
+
 
 static inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t size)
 {
@@ -87,7 +95,7 @@ static int open_vybrid(libusb_device_handle** h)
 		}
 		if (desc.idVendor == 0x15a2) {
 			if ((desc.idProduct == 0x0080) || (desc.idProduct == 0x007d) || (desc.idProduct == 0x006a))
-				printf("Found supported device\n");
+				dispatch_msg(silent, "Found supported device\n");
 			else
 				printf("Found unsuported product of known vendor, trying standard settings for this device\n");
 
@@ -279,6 +287,9 @@ int do_status(struct libusb_device_handle* h)
 	b[0]=1;
 	set_status_cmd(b+1);
 	//print_cmd(b+1);
+	if (silent)
+		fprintf(stderr, "\n");
+
 	if((rc = control_transfer(h,b,CMD_SIZE)) < 0) {
 		fprintf(stderr,"Failed to send status command (%d,%s)\n",rc,libusb_error_name(rc));
 		goto END;
@@ -307,7 +318,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 
 	libusb_init(0);
 
-	printf("Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
+	dispatch_msg(silent, "Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
 	while(1){
 		if (err) {
 			usleep(500000);
@@ -332,8 +343,8 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		}
 
 		if((rc = do_status(h)) != 0) {
-			fprintf(stderr,"Device failure\n");
-			continue;
+			fprintf(stderr,"Device failure (check if device is in serial download mode, check USB connection)\n");
+			return -1;
 		}
 
 		uint32_t load_addr = 0;
@@ -357,7 +368,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 				continue;
 			}
 		}
-		printf("Image file loaded.\n");
+		dispatch_msg(silent, "Image file loaded.\n");
 
 		uint32_t jump_addr = 0;
 		if (kernel != NULL && image == NULL && size == 0) {
@@ -373,7 +384,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 			fprintf(stderr,"Failed to send jump command to device (%d)\n",rc);
 			continue;
 		}
-		printf("Code execution started.\n");
+		dispatch_msg(silent, "Code execution started.\n");
 
 		libusb_release_interface(h,0);
 //		if(kernel_attached)
@@ -382,7 +393,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		break;
 	}
 
-	printf("Closing usb loader\n");
+	dispatch_msg(silent, "Closing usb loader\n");
 	if(h) libusb_close(h);
 	libusb_exit(0);
 	return rc;
