@@ -176,7 +176,7 @@ int send_module(libusb_device_handle *dev, mod_t *mod)
 	}
 
 	if (mod->args != NULL)
-		argsz = strlen(mod->args);
+		argsz = strlen(mod->args) + 1;
 
 	if (argsz > 128) {
 		mod->args[argsz - 1] = 0;
