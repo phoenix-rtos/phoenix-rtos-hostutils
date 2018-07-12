@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int ind;
-	int len;
+	int len, len2;
 	char bspfl = 0;
 	char *kernel = "../kernel/phoenix";
 
@@ -112,6 +112,7 @@ int main(int argc, char *argv[])
 		{"console", required_argument, 0, 'c'},
 		{"initrd", required_argument, 0, 'I'},
 		{"append", required_argument, 0, 'a'},
+		{"execute", required_argument, 0, 'x'},
 		{"help", no_argument, &help, 1},
 		{"output", required_argument, 0, 'o'},
 		{0, 0, 0, 0}};
@@ -119,7 +120,7 @@ int main(int argc, char *argv[])
 	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
 
 	while (1) {
-		c = getopt_long(argc, argv, "k:p:s:1m:i:u:a:c:I:", long_opts, &opt_idx);
+		c = getopt_long(argc, argv, "k:p:s:1m:i:u:a:x:c:I:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
@@ -160,21 +161,24 @@ int main(int argc, char *argv[])
 			ttys[i++] = optarg; /* Load address */
 			break;
 		case 'a':
+		case 'x':
 			ind = optind - 1;
-			len = 0;
+			len = (append != NULL) ? strlen(append) : 0;
+			len2 = 0;
 			while (ind < argc && *argv[ind] != '-') {
-				len += strlen(argv[ind]) + 1;
+				len2 += strlen(argv[ind]) + 1 + (c == 'x');
 				ind++;
 			}
-			append = malloc(len + 1);
+			append = realloc(append, len + len2 + 1);
 			ind = optind - 1;
-			len = 0;
 			while (ind < argc && *argv[ind] != '-') {
-				sprintf(append + len, "%s ", argv[ind]);
-				len += strlen(argv[ind]) + 1;
+				if (c == 'x')
+					len += sprintf(append + len, "X%s ", argv[ind]);
+				else
+					len += sprintf(append + len, "%s ", argv[ind]);
 				ind++;
 			}
-			append[len - 1] = '\0';
+			append[len] = '\0';
 			break;
 		case 'I':
 			initrd = optarg;
@@ -229,6 +233,7 @@ int main(int argc, char *argv[])
 				"--kernel, -k\t- kernel image path\n"
 				"--console, -c\t- console server path\n"
 				"--initrd, -I\t- initrd server path\n"
+				"--execute, -x\t- path to servers appended to initrd with optional arguments (they will be automatically executed),\n"
 				"--append, -a\t- path to servers appended to initrd with optional arguments,\n"
 				"\t\t  prefix path with F to fetch or X to fetch and execute (only in sdp and upload modes)\n"
 				"\t\t  example: --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n"
