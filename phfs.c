@@ -33,7 +33,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 	int flags = *(u32 *)msg->data, f = 0, ofd;
 	u16 seq = msg_getseq(msg);
 
-	msg->data[MSG_MAXLEN] = 0;
+	msg->data[MSG_MAXLEN - 1] = 0;
 
 	f = ((flags & 0x1) == PHFS_RDONLY) ? O_RDONLY : O_RDWR;
 	f = ((flags & 0x2) == PHFS_CREATE) ? (f | O_CREAT) : f;

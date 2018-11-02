@@ -73,7 +73,7 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 	}
 	else if (mode == UDP) {
 		if ((fd = udp_open(dev_addr, speed_port)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%hu'\n", getpid(), dev_addr, speed_port);
+			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%u'\n", getpid(), dev_addr, speed_port);
 			return ERR_DISPATCH_IO;
 		}
 		msg_send = msg_udp_send;

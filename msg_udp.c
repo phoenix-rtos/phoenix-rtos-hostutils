@@ -41,7 +41,7 @@ in_addr_t bcast_addr(in_addr_t in_addr)
 {
 	struct ifaddrs *ifaddr, *ifa;
 	struct sockaddr_in *inet_addr;
-	in_addr_t in_bcast;
+	in_addr_t in_bcast = 0;
 
 	if (getifaddrs(&ifaddr) == -1) {
 		perror("getifaddrs");
