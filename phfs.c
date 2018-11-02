@@ -195,7 +195,7 @@ int phfs_stat(int fd, msg_t *msg, char *sysdir)
 	memcpy(&test, io->buff,sizeof(stat_send));
 	io->pos=0;
 	l = sizeof(stat_send);
-	msg->data[MSG_MAXLEN] = 0;
+	msg->data[MSG_MAXLEN - 1] = 0;
 	io->len=l;
 	msg_settype(msg, MSG_FSTAT);
 	msg_setlen(msg, l+hdrsz);
