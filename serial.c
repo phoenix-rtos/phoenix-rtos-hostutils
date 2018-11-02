@@ -28,8 +28,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
-#include <fcntl.h>
-#include <termios.h>
 
 #include "types.h"
 #include "errors.h"

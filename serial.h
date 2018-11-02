@@ -28,7 +28,14 @@
 #define _SERIAL_H_
 
 #include <sys/types.h>
+#include <fcntl.h>
+#include <termios.h>
 #include "types.h"
+
+
+#ifndef B460800
+#define B460800 B115200
+#endif
 
 
 extern int serial_open(char *dev, uint speed);
