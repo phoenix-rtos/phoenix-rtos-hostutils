@@ -25,6 +25,14 @@
 #include <unistd.h>
 
 #include <libusb-1.0/libusb.h>
+#if defined(__CYGWIN__)
+# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
+#  error "libusb API version too low. Reqiured minimum 0x01000106"
+# endif
+# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
+#else
+# define change_libusb_backend(ctx_ptr)
+#endif
 
 #include "dispatch.h"
 
@@ -455,10 +463,12 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append, in
 	}
 
 
-	if (libusb_init(NULL)) {
+	libusb_context * ctx = NULL;
+	if (libusb_init(&ctx)) {
 		printf("libusb error\n");
 		return 1;
 	}
+	change_libusb_backend(ctx);
 
 	printf("Waiting for the device to boot...");
 	fflush(stdout);
@@ -511,7 +521,8 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append, in
 
 	libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 	libusb_close(dev);
-	libusb_exit(NULL);
+	libusb_exit(ctx);
+	ctx = NULL;
 	free(modules);
 	printf("Transfer complete\n");
 	return 0;
