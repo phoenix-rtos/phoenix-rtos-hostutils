@@ -14,28 +14,18 @@
  */
 
 
-#include<libusb-1.0/libusb.h>
-#if defined(__CYGWIN__)
-# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
-#  error "libusb API version too low. Reqiured minimum 0x01000106"
-# endif
-# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
-#else
-# define change_libusb_backend(ctx_ptr)
-#endif
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
 
-
-#include<stdio.h>
-#include<sys/types.h>
-#include<sys/stat.h>
-#include<fcntl.h>
-#include<errno.h>
-#include<string.h>
-#include<unistd.h>
-#include<stdint.h>
-#include<arpa/inet.h>
-#include<stdlib.h>
-
+#include <hidapi/hidapi.h>
 
 /* SDP protocol section */
 #define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
@@ -93,73 +83,40 @@ void print_cmd(unsigned char* b)
 }
 
 
-#define HID_GET_REPORT			0x01
-#define HID_SET_REPORT			0x09
-#define HID_REPORT_TYPE_OUTPUT	0x02
-#define CTRL_OUT                LIBUSB_ENDPOINT_OUT|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE
-#define ENDPOINT_ADDRESS        0x81
-#define USB_TIMEOUT				50
-
-
-static int open_vybrid(libusb_device_handle** h, libusb_context* ctx)
+static int open_vybrid(hid_device** h)
 {
-	libusb_device **list = 0;
-	struct libusb_device_descriptor desc;
-	ssize_t i, cnt;
-	int rc, retval = 0;
-
-	cnt = libusb_get_device_list(ctx, &list);
-
-	if (cnt < 0)
+	int retval = 0;
+	struct hid_device_info* list = hid_enumerate(0x15a2, 0x0); // Find all devices with given vendor
+	if (list == NULL)
 		fprintf(stderr,"Error getting device list\n");
 
-	for (i = 0; i < cnt; i++) {
-		if (LIBUSB_SUCCESS != (rc = libusb_get_device_descriptor(list[i], &desc))) {
-			fprintf(stderr, "Failed to get device descriptor (%s)\n", libusb_error_name(rc));
-			continue;
+	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
+		if ((it->product_id == 0x0080) || (it->product_id == 0x007d) || (it->product_id == 0x006a)) {
+			dispatch_msg(silent, "Found supported device\n");
+		} else {
+			printf("Found unsuported product of known vendor, trying standard settings for this device\n");
 		}
-		if (desc.idVendor == 0x15a2) {
-			if ((desc.idProduct == 0x0080) || (desc.idProduct == 0x007d) || (desc.idProduct == 0x006a))
-				dispatch_msg(silent, "Found supported device\n");
-			else
-				printf("Found unsuported product of known vendor, trying standard settings for this device\n");
 
-			if (LIBUSB_SUCCESS != (rc = libusb_open(list[i], h))) {
-				fprintf(stderr,"Failed to open device (%s)\n", libusb_error_name(rc));
-				continue;
-			} else {
-				retval = 1;
-				break;
-			}
+		if ((*h = hid_open_path(it->path)) == NULL) {
+			fprintf(stderr, "Failed to open device\n");
+			continue;
+		} else {
+			retval = 1;
+			break;
 		}
 	}
 
 	if (list)
-		libusb_free_device_list(list, 1);
+		hid_free_enumeration(list);
 
 	return retval;
-}
-
-
-static inline int control_transfer(libusb_device_handle* h,unsigned char* b,size_t n)
-{
-	//printf("libusb_control_transfer(h,%x,%x,%x,%x,b,%d,timeout)\n",CTRL_OUT,
-	 //       HID_SET_REPORT,HID_REPORT_TYPE_OUTPUT<<8 | b[0],0,n);
-	return libusb_control_transfer(h,CTRL_OUT, HID_SET_REPORT,HID_REPORT_TYPE_OUTPUT<<8 | b[0],0 /*interface*/,
-			b,n,USB_TIMEOUT);
-}
-
-
-static inline int interrupt_transfer(libusb_device_handle* h, unsigned char* b,int n,int* transferred)
-{
-	return libusb_interrupt_transfer(h,ENDPOINT_ADDRESS,b,n,transferred,USB_TIMEOUT);
 }
 
 
 #define CMD_SIZE 17
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
-int load_file(struct libusb_device_handle* h,char* filename,uint32_t  addr)
+int load_file(hid_device* h, char* filename, uint32_t addr)
 {
 	int fd=-1,n,rc;
 	struct stat f_st;
@@ -179,15 +136,15 @@ int load_file(struct libusb_device_handle* h,char* filename,uint32_t  addr)
 	b[0]=1;
 	set_write_file_cmd(b+1,addr,f_st.st_size);
 	//print_cmd(b+1);
-	if((rc = control_transfer(h,b,CMD_SIZE)) < 0){
-		fprintf(stderr,"Failed to send write_file command (%s)\n",libusb_error_name(rc));
+	if ((rc = hid_write(h, b, CMD_SIZE)) < 0){
+		fprintf(stderr, "Failed to send write_file command\n");
 		goto END;
 	}
 
 	b[0]=2;
 	while((n = read(fd,b+1,BUF_SIZE-1)) > 0)
-		if((rc = control_transfer(h,b,n+1)) < 0) {
-			fprintf(stderr,"Failed to send file contents (%s)\n",libusb_error_name(rc));
+		if((rc = hid_write(h, b, n + 1)) < 0) {
+			fprintf(stderr, "Failed to send file contents\n");
 			goto END;
 		}
 
@@ -198,15 +155,15 @@ int load_file(struct libusb_device_handle* h,char* filename,uint32_t  addr)
 	}
 
 	//Receive report 3
-	if(((rc=interrupt_transfer(h,b,BUF_SIZE,&n)) < 0) || n!=5) {
-		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)\n",libusb_error_name(rc),n);
+	if((rc = hid_read(h, b, BUF_SIZE)) != 5) {
+		fprintf(stderr,"Failed to receive HAB mode (n=%d)\n",rc);
 		rc = -1;
 		goto END;
 	}
 	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if(((rc = interrupt_transfer(h,b,BUF_SIZE,&n)) < 0) || *(uint32_t*)(b+1)!=0x88888888) {
-			fprintf(stderr,"Failed to receive complete status (%s,status=%02x%02x%02x%02x)\n",libusb_error_name(rc),b[1],b[2],b[3],b[4]);
-			goto END;
+	if(((rc = hid_read(h,b,BUF_SIZE)) < 0) || *(uint32_t*)(b + 1) != 0x88888888) {
+		fprintf(stderr,"Failed to receive complete status (status=%02x%02x%02x%02x)\n",b[1],b[2],b[3],b[4]);
+		goto END;
 	}
 
 END:
@@ -214,7 +171,7 @@ END:
 	return rc;
 }
 
-int load_image(struct libusb_device_handle *h, void *image, ssize_t size, uint32_t  addr)
+int load_image(hid_device *h, void *image, ssize_t size, uint32_t  addr)
 {
 	int n,rc;
 	ssize_t offset = 0;
@@ -223,8 +180,8 @@ int load_image(struct libusb_device_handle *h, void *image, ssize_t size, uint32
 	b[0] = 1;
 	set_write_file_cmd(b + 1, addr, size);
 	//print_cmd(b+1);
-	if ((rc = control_transfer(h, b, CMD_SIZE)) < 0) {
-		fprintf(stderr,"Failed to send write_file command (%s)\n",libusb_error_name(rc));
+	if ((rc = hid_write(h, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command\n");
 		goto END;
 	}
 
@@ -233,45 +190,45 @@ int load_image(struct libusb_device_handle *h, void *image, ssize_t size, uint32
 		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
 		memcpy(b + 1, image + offset, n);
 		offset += n;
-		if((rc = control_transfer(h, b, n + 1)) < 0) {
-			fprintf(stderr,"Failed to send image contents (%s)\n",libusb_error_name(rc));
+		if((rc = hid_write(h, b, n + 1)) < 0) {
+			fprintf(stderr, "Failed to send image contents\n");
 			goto END;
 		}
 	}
 
 	//Receive report 3
-	if (((rc = interrupt_transfer(h, b, BUF_SIZE, &n)) < 0) || n != 5) {
-		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)\n",libusb_error_name(rc),n);
+	if ((rc = hid_read(h, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
 		goto END;
 	}
 	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if (((rc = interrupt_transfer(h, b, BUF_SIZE, &n)) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
-			fprintf(stderr,"Failed to receive complete status (%s,status=%02x%02x%02x%02x)\n",libusb_error_name(rc),b[1],b[2],b[3],b[4]);
+	if ((rc = hid_read(h, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
 END:
 	return rc;
 }
 
-int jmp_2_addr(libusb_device_handle* h,uint32_t addr)
+int jmp_2_addr(hid_device* h,uint32_t addr)
 {
-	int n,rc = 0;
+	int rc=0;
 	unsigned char b[INTERRUPT_SIZE]={0};
 
 	b[0]=1;
 	set_jmp_cmd(b+1,addr);
 	//print_cmd(b+1);
-	if((rc = control_transfer(h,b,CMD_SIZE)) < 0) {
-		fprintf(stderr,"Failed to send jmp command (%s)",libusb_error_name(rc));
+	if((rc = hid_write(h, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send jmp command");
 		goto END;
 	}
-	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) < 0) {
-		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)",libusb_error_name(rc),n);
+	if((rc = hid_read(h, b, INTERRUPT_SIZE)) < 0) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)", rc);
 		goto END;
 	}
 	//printf("HAB: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) >= 0) {
-		fprintf(stderr,"Received HAB error status (%s,n=%d): %02x%02x%02x%02x\nJump address command failed\n",libusb_error_name(rc),n,b[1],b[2],b[3],b[4]);
+	if((rc = hid_read(h,b,INTERRUPT_SIZE)) >= 0) {
+		fprintf(stderr, "Received HAB error status (n=%d): %02x%02x%02x%02x\nJump address command failed\n", rc, b[1], b[2], b[3], b[4]);
 		goto END;
 	} else
 		rc = 0;
@@ -280,57 +237,56 @@ END:
 	return rc;
 }
 
-
-int write_reg(libusb_device_handle* h,uint32_t addr,uint32_t v)
+int write_reg(hid_device* h, uint32_t addr, uint32_t v)
 {
-	int n,rc;
+	int rc;
 	unsigned char b[INTERRUPT_SIZE]={0};
 
 	b[0]=1;
 	set_write_reg_cmd(b+1,addr,v);
 	//print_cmd(b+1);
-	rc = control_transfer(h,b,CMD_SIZE);
+	rc = hid_write(h, b, CMD_SIZE);
 	if(rc < 0)
-		fprintf(stderr,"Failed to send write command (%s)",libusb_error_name(rc));
+		fprintf(stderr, "Failed to send write command");
 	else
-		rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n);
-	if(rc < 0 || n != 5)
-		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)",libusb_error_name(rc),n);
+		rc = hid_read(h, b, INTERRUPT_SIZE);
+	if(rc != 5)
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)", rc);
 	else
-		rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n);
+		rc = hid_read(h, b, INTERRUPT_SIZE);
 	if(rc < 0)
-		fprintf(stderr,"Failed to receive status (%s,n=%d)",libusb_error_name(rc),n);
+		fprintf(stderr, "Failed to receive status (n=%d)", rc);
 	//printf("Status: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
 
 	return rc;
 }
 
-int do_status(struct libusb_device_handle* h)
+int do_status(hid_device* h)
 {
 	unsigned char b[INTERRUPT_SIZE]={0};
-	int rc,n;
+	int rc;
 	b[0]=1;
 	set_status_cmd(b+1);
 	//print_cmd(b+1);
 	if (silent)
 		fprintf(stderr, "\n");
 
-	if((rc = control_transfer(h,b,CMD_SIZE)) < 0) {
-		fprintf(stderr,"Failed to send status command (%d,%s)\n",rc,libusb_error_name(rc));
+	if((rc = hid_write(h, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send status command (%d)\n", rc);
 		goto END;
 	}
-	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) < 0 || n != 5) {
-		fprintf(stderr,"Failed to receive HAB mode (%s,n=%d)\n",libusb_error_name(rc),n);
+	if((rc = hid_read(h, b, INTERRUPT_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		goto END;
 	}
-	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) < 0) {
-		fprintf(stderr,"Failed to receive status (%s,n=%d)\n",libusb_error_name(rc),n);
+	if((rc = hid_read(h, b, INTERRUPT_SIZE)) < 0) {
+		fprintf(stderr, "Failed to receive status (n=%d)\n", rc);
 		goto END;
 	}
 	//printf("Status: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
 
 END:
-	return rc;
+	return rc < 0;
 }
 
 
@@ -338,12 +294,9 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 {
 	int rc;
 	int err = 0;
-	libusb_device_handle *h = 0;
-//	int kernel_attached = 0;
+	hid_device *h = 0;
 
-	libusb_context* ctx = NULL;
-	libusb_init(&ctx);
-	change_libusb_backend(ctx);
+	hid_init();
 
 	dispatch_msg(silent, "Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
 	while(1){
@@ -354,18 +307,9 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		}
 		err++;
 
-		if(open_vybrid(&h, ctx) == 0) {
+		if(open_vybrid(&h) == 0) {
 			if (err)
 				err--;
-			continue;
-		}
-
-		if(libusb_kernel_driver_active(h,0) > 0){
-//			kernel_attached=1;
-			libusb_detach_kernel_driver(h,0);
-		}
-		if((rc = libusb_claim_interface(h,0)) < 0) {
-			fprintf(stderr,"Failed to claim device interface (%s)\n",libusb_error_name(rc));
 			continue;
 		}
 
@@ -413,17 +357,12 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		}
 		dispatch_msg(silent, "Code execution started.\n");
 
-		libusb_release_interface(h,0);
-//		if(kernel_attached)
-//			libusb_attach_kernel_driver(h,0);
-
 		break;
 	}
 
 	dispatch_msg(silent, "Closing usb loader\n");
-	if(h) libusb_close(h);
-	libusb_exit(ctx);
-	ctx = NULL;
+	if(h) hid_close(h);
+	hid_exit();
 	return rc;
 }
 
