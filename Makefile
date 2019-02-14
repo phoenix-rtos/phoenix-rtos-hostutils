@@ -12,6 +12,13 @@ LD = gcc
 LDFLAGS = -lm -lusb-1.0
 
 OBJS = serial.o bsp.o dispatch.o msg.o msg_udp.o phfs.o phoenixd.o usb_vybrid.o usb_imx.o
+detected_OS := $(shell uname)
+ifeq ($(detected_OS),Linux)
+	LDFLAGS += -lhidapi-hidraw
+else
+	LDFLAGS += -lhidapi
+endif
+
 
 all: phoenixd
 
