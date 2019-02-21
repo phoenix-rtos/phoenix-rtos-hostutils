@@ -15,6 +15,15 @@
 
 
 #include<libusb-1.0/libusb.h>
+#if defined(__CYGWIN__)
+# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
+#  error "libusb API version too low. Reqiured minimum 0x01000106"
+# endif
+# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
+#else
+# define change_libusb_backend(ctx_ptr)
+#endif
+
 
 #include<stdio.h>
 #include<sys/types.h>
@@ -92,14 +101,14 @@ void print_cmd(unsigned char* b)
 #define USB_TIMEOUT				50
 
 
-static int open_vybrid(libusb_device_handle** h)
+static int open_vybrid(libusb_device_handle** h, libusb_context* ctx)
 {
 	libusb_device **list = 0;
 	struct libusb_device_descriptor desc;
 	ssize_t i, cnt;
 	int rc, retval = 0;
 
-	cnt = libusb_get_device_list(0, &list);
+	cnt = libusb_get_device_list(ctx, &list);
 
 	if (cnt < 0)
 		fprintf(stderr,"Error getting device list\n");
@@ -332,7 +341,9 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 	libusb_device_handle *h = 0;
 //	int kernel_attached = 0;
 
-	libusb_init(0);
+	libusb_context* ctx = NULL;
+	libusb_init(&ctx);
+	change_libusb_backend(ctx);
 
 	dispatch_msg(silent, "Starting usb loader.\nWaiting for compatible USB device to be discovered ...\n");
 	while(1){
@@ -343,7 +354,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		}
 		err++;
 
-		if(open_vybrid(&h) == 0) {
+		if(open_vybrid(&h, ctx) == 0) {
 			if (err)
 				err--;
 			continue;
@@ -411,7 +422,8 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 
 	dispatch_msg(silent, "Closing usb loader\n");
 	if(h) libusb_close(h);
-	libusb_exit(0);
+	libusb_exit(ctx);
+	ctx = NULL;
 	return rc;
 }
 
