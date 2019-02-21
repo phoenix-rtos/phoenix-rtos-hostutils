@@ -5,6 +5,7 @@
  *
  * Phoenix remote filesystem server
  *
+ * Copyright 2011 Phoenix Systems
  * Copyright 2004 Pawel Pisarczyk
  *
  * This file is part of Phoenix-RTOS.

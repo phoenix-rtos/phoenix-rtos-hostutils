@@ -5,12 +5,15 @@
  *
  * BSP2 message dispatcher
  *
+ * Copyright 2011 Phoenix Systems
  * Copyright 2004 Pawel Pisarczyk
  *
  * This file is part of Phoenix-RTOS.
  *
  * %LICENSE%
  */
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

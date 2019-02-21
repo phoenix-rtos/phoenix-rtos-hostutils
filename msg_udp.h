@@ -6,7 +6,6 @@
  * BSP2 protocol implementation
  *
  * Copyright 2012 Phoenix Systems
- *
  * Author Jacek Popko
  *
  * This file is part of Phoenix-RTOS.

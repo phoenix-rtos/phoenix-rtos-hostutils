@@ -6,7 +6,6 @@
  * UDP communication routines
  *
  * Copyright 2012, 2013 Phoenix Systems
- *
  * Author: Jacek Popko
  *
  * This file is part of Phoenix-RTOS.
@@ -167,6 +166,7 @@ int udp_open(char *node, uint port)
 	return fd;
 }
 
+
 #ifdef HEXDUMP
 static void hex_dump(void *data, int size)
 {
@@ -220,6 +220,7 @@ static void hex_dump(void *data, int size)
 	}
 }
 #endif
+
 
 int msg_udp_send(int fd, msg_t *msg, u16 seq)
 {

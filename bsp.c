@@ -5,7 +5,9 @@
  *
  * BSP protocol implementation
  *
+ * Copyright 2011 Phoenix Systems
  * Copyright 2001 Pawel Pisarczyk
+ * Author: Pawel Pisarczyk
  *
  * This file is part of Phoenix-RTOS.
  *

@@ -1,32 +1,22 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP2 message dispatcher
  *
+ * Copyright 2011 Phoenix Systems
  * Copyright 2004 Pawel Pisarczyk
  *
  * This file is part of Phoenix-RTOS.
  *
- * Phoenix-RTOS is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * Phoenix-RTOS kernel is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Phoenix-RTOS kernel; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * %LICENSE%
  */
 
 #ifndef _DISPATCH_H_
 #define _DISPATCH_H_
 #include "msg.h"
+
 
 typedef enum {
 	SERIAL,
@@ -35,6 +25,7 @@ typedef enum {
 	USB_VYBRID,
 	USB_IMX
 } dmode_t;
+
 
 /* Function reads and dispatches messages */
 extern int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir);
@@ -45,5 +36,6 @@ extern int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jump_addr, vo
 
 extern int usb_imx_dispatch(char *kernel, char *uart, char *initrd, char *append, int plugin);
 extern int boot_image(char *kernel, char *initrd, char *console, char *append, char *output, int plugin);
+
 
 #endif

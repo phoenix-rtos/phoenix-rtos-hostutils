@@ -10,7 +10,7 @@
  *
  * This file is part of Phoenix-RTOS.
  *
- * %LICENSE%
+ * See the LICENSE
  */
 
 #define _GNU_SOURCE

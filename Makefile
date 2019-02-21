@@ -1,26 +1,34 @@
 #
 # phoenixd -  Phoenix server
-# (c) Pawel Pisarczyk, 2001
+#
+# Copyright 2018 Phoenix Systems
+# Copyright 2001 Pawel Pisarczyk
 #
 
+SIL = @
 CC = gcc
+CFLAGS = -c -Wall -I . -O2 -g
 LD = gcc
-CFLAGS = -c -Wall -I . -O0 -g
-LIBS = -lm -lusb-1.0
+LDFLAGS = -lm -lusb-1.0
 
-SRCS = serial.c bsp.c dispatch.c msg.c msg_udp.c phfs.c phoenixd.c usb_vybrid.c usb_imx.c
-OBJS = $(SRCS:.c=.o)
-BIN = phoenixd
+OBJS = serial.o bsp.o dispatch.o msg.o msg_udp.o phfs.o phoenixd.o usb_vybrid.o usb_imx.o
 
 all: phoenixd
 
 .c.o:
-	$(CC) $(CFLAGS) $<
+	@echo "CC" $<
+	$(SIL)$(CC) $(CFLAGS) $<
 
 $(OBJS): serial.h bsp.h errors.h elf.h
 
 phoenixd: $(OBJS)
-	$(LD) $(LDFLAGS) -o $(BIN) $(OBJS) $(LIBS)
-
+	@echo "LINK" $@
+	$(SIL)$(LD) $(LDFLAGS) -o $@ $(OBJS)
+	
+.PHONY: clean
 clean:
-	rm -f *.o *~ core
+	@echo "CLEAN"
+
+ifneq ($(filter clean,$(MAKECMDGOALS)),)
+	$(shell rm -rf *.o core)
+endif

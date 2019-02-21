@@ -5,23 +5,12 @@
  *
  * Phoenix remote filesystem server
  *
+ * Copyright 2011 Phoenix Systems
  * Copyright 2004 Pawel Pisarczyk
  *
  * This file is part of Phoenix-RTOS.
  *
- * Phoenix-RTOS is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * Phoenix-RTOS kernel is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Phoenix-RTOS kernel; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * See the LICENSE
  */
 
 #ifndef _PHFS_H_
@@ -54,21 +43,20 @@ extern int phfs_handlemsg(int fd, msg_t *msg, char *sysdir);
 
 struct	pho_stat
 {
+	u32 st_dev;
+	u32 st_ino;
+	u16 st_mode;
+	u16 st_nlink;
+	u16 st_uid;
+	u16 st_gid;
+	u32 st_rdev;
+	u32 st_size;
 
-	u32		st_dev;
-	u32		st_ino;
-	u16		st_mode;
-	u16		st_nlink;
-	u16		st_uid;
-	u16		st_gid;
-	u32		st_rdev;
-	u32		st_size;
-
-	u32		st_atime_;
-	u32		st_mtime_;
-	u32		st_ctime_;
-	s32		st_blksize;
-	s32		st_blocks;
+	u32 st_atime_;
+	u32 st_mtime_;
+	u32 st_ctime_;
+	s32 st_blksize;
+	s32 st_blocks;
 };
 
 #endif

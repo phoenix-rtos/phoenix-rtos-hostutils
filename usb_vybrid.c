@@ -1,3 +1,19 @@
+/*
+ * Phoenix-RTOS
+ *
+ * Phoenix server
+ *
+ * load modules for Vybrid
+ *
+ * Copyright 2014, 2018 Phoenix Systems
+ * Author: Kamil Amanowicz, Pawel Tryfon
+ *
+ * This file is part of Phoenix-RTOS.
+ *
+ * See the LICENSE
+ */
+
+
 #include<libusb-1.0/libusb.h>
 
 #include<stdio.h>
@@ -237,7 +253,7 @@ int jmp_2_addr(libusb_device_handle* h,uint32_t addr)
 	set_jmp_cmd(b+1,addr);
 	//print_cmd(b+1);
 	if((rc = control_transfer(h,b,CMD_SIZE)) < 0) {
-		fprintf(stderr,"Failed to send jmp command (%s)",libusb_error_name(n));
+		fprintf(stderr,"Failed to send jmp command (%s)",libusb_error_name(rc));
 		goto END;
 	}
 	if((rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n)) < 0) {
@@ -266,7 +282,7 @@ int write_reg(libusb_device_handle* h,uint32_t addr,uint32_t v)
 	//print_cmd(b+1);
 	rc = control_transfer(h,b,CMD_SIZE);
 	if(rc < 0)
-		fprintf(stderr,"Failed to send write command (%s)",libusb_error_name(n));
+		fprintf(stderr,"Failed to send write command (%s)",libusb_error_name(rc));
 	else
 		rc=interrupt_transfer(h,b,INTERRUPT_SIZE,&n);
 	if(rc < 0 || n != 5)
