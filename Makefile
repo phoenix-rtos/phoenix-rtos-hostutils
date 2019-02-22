@@ -23,8 +23,8 @@ $(OBJS): serial.h bsp.h errors.h elf.h
 
 phoenixd: $(OBJS)
 	@echo "LINK" $@
-	$(SIL)$(LD) $(LDFLAGS) -o $@ $(OBJS)
-	
+	$(SIL)$(LD) -o $@ $(OBJS) $(LDFLAGS)
+
 .PHONY: clean
 clean:
 	@echo "CLEAN"
