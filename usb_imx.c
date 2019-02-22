@@ -419,7 +419,7 @@ int boot_image(char *kernel, char *initrd, char *console, char *append, char *ou
 		}
 		usb_vybrid_dispatch(NULL, (char *)&load_addr, (char *)&jump_addr, image, offset);
 	} else {
-		ifd = open(output, O_RDWR | O_TRUNC | O_CREAT);
+		ifd = open(output, O_RDWR | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
 
 		if (ifd < 0) {
 			printf("Output file open error\n");
