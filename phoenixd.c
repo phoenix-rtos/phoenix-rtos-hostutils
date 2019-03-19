@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (output) {
-		if (!kernel || !initrd) {
+		if (!kernel) {
 			printf("Output file needs kernel and initrd paths\n");
 			return 0;
 		}

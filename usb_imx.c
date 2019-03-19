@@ -441,27 +441,19 @@ out:
 }
 
 
-int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append, int plugin)
+int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, int plugin)
 {
 	char *mod_tok, *arg_tok;
 	char *mod_p, *arg_p;
 	char *modules;
 	mod_t *mod;
 	libusb_device_handle *dev = NULL;
+	int len = 3;
 
 	if (boot_image(kernel, initrd, NULL, NULL, NULL, plugin)) {
 		printf("Image booting error. Exiting...\n");
 		return -1;
 	}
-
-	if (initrd == NULL)
-		return 0;
-
-	if (console == NULL || !strlen(console)) {
-		printf("No console specified\n");
-		return 1;
-	}
-
 
 	libusb_context * ctx = NULL;
 	if (libusb_init(&ctx)) {
@@ -476,12 +468,23 @@ int usb_imx_dispatch(char *kernel ,char *console, char *initrd, char *append, in
 
 	printf("\rDevice booted                    \n");
 
-	modules = malloc(strlen(console) + (append != NULL ? strlen(append) : 0) + 3);
-	memset(modules, 0, strlen(console) + (append != NULL ? strlen(append) : 0) + 3);
-	modules[0] = 'X';
-	strcat(modules, console);
+	if (console != NULL)
+		len += strlen(console);
+
+	if (append != NULL)
+		len += strlen(append);
+
+	modules = malloc(len);
+	memset(modules, 0, len);
+	if (console != NULL) {
+		modules[0] = 'X';
+		strcat(modules, console);
+	}
+
 	if (append != NULL && strlen(append)) {
-		modules[strlen(console) + 1] = ' ';
+		if (console != NULL)
+			modules[strlen(console) + 1] = ' ';
+
 		strcat(modules, append);
 	}
 
