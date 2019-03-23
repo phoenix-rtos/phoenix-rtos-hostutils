@@ -249,6 +249,7 @@ int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 		}
 	}
 	fprintf(stderr, "\n");
+	return 0; // ignore report 3 and 4 for now
 
 	//Receive report 3
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
@@ -597,6 +598,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		strcat(modules, append);
 	}
 
+	printf("modules: %s\n", modules);
 	mod_tok = strtok_r(modules, " ", &mod_p);
 
 	if (mod_tok == NULL)
@@ -616,7 +618,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		}
 
 		mod->args = strtok_r(NULL, " ", &arg_p);
-
+		printf("Sending module '%s'\n", mod->name);
 		if (send_module(dev, mod, 0)) {
 			//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
 			//libusb_close(dev);
