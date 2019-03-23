@@ -59,6 +59,12 @@
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
 
+static void print_cmd(unsigned char* b)
+{
+	printf("Command:\n  type=%02x%02x, addr=%08x, format=%02x, count=%08x, data=%08x\n",b[0],b[1],*(uint32_t*)(b+2),b[6],*(uint32_t*)(b+7),*(uint32_t*)(b+11));
+
+}
+
 static inline void set_write_file_cmd(unsigned char* b, uint32_t addr, uint32_t size)
 {
 	SET_CMD_TYPE(b,0x04);
@@ -222,23 +228,27 @@ int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 
 	b[0] = 1;
 	set_write_file_cmd(b + 1, addr, mod->size);
-	print_cmd(b+1);
-	printf("CMD_SIZE: %d\n", CMD_SIZE);
+	//print_cmd(b+1);
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
 		goto END;
 	}
 
 	b[0] = 2;
+	int i = 0;
 	while (offset < mod->size) {
 		n = (BUF_SIZE - 1 > mod->size - offset) ? (mod->size - offset) : (BUF_SIZE - 1);
 		memcpy(b + 1, mod->data + offset, n);
 		offset += n;
+		if ((i++ % 50) == 0) {
+			fprintf(stderr, "\rSent (%d/%d) %5.2f%%     ", offset, mod->size, ((float)offset / (float)mod->size) * 100.0);
+		}
 		if((rc = hid_write(dev, b, n + 1)) < 0) {
-			fprintf(stderr, "Failed to send image contents (%d)\n", rc);
+			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
 			goto END;
 		}
 	}
+	fprintf(stderr, "\n");
 
 	//Receive report 3
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
