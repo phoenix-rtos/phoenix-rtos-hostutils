@@ -23,16 +23,20 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <arpa/inet.h>
 
-#include <libusb-1.0/libusb.h>
-#if defined(__CYGWIN__)
-# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
-#  error "libusb API version too low. Reqiured minimum 0x01000106"
-# endif
-# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
-#else
-# define change_libusb_backend(ctx_ptr)
-#endif
+//#include <libusb-1.0/libusb.h>
+//#if defined(__CYGWIN__)
+//# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
+//#  error "libusb API version too low. Reqiured minimum 0x01000106"
+//# endif
+//# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
+//#else
+//# define change_libusb_backend(ctx_ptr)
+//#endif
+#include <hidapi/hidapi.h>
+
 
 #include "dispatch.h"
 
@@ -44,6 +48,45 @@
 #define PADDR_BEGIN 0x80000000
 #define PADDR_END (PADDR_BEGIN + 128 * 1024 * 1024 - 1)
 
+/* SDP protocol section */
+#define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
+#define SET_ADDR(b,v) *((uint32_t*)((b)+2))=htonl(v)
+#define SET_COUNT(b,v) *((uint32_t*)((b)+7))=htonl(v);
+#define SET_DATA(b,v) *((uint32_t*)((b)+11))=htonl(v);
+#define SET_FORMAT(b,v) (b)[6]=(v);
+
+#define CMD_SIZE 17
+#define BUF_SIZE 1025
+#define INTERRUPT_SIZE 65
+
+static inline void set_write_file_cmd(unsigned char* b, uint32_t addr, uint32_t size)
+{
+	SET_CMD_TYPE(b,0x04);
+	SET_ADDR(b,addr);
+	SET_COUNT(b,size);
+	SET_FORMAT(b,0x20);
+}
+
+static inline void set_jmp_cmd(unsigned char* b, uint32_t addr)
+{
+	SET_CMD_TYPE(b,0x0b);
+	SET_ADDR(b,addr);
+	SET_FORMAT(b,0x20);
+}
+
+static inline void set_status_cmd(unsigned char* b)
+{
+	SET_CMD_TYPE(b,0x05);
+}
+
+static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v)
+{
+	SET_CMD_TYPE(b,0x02);
+	SET_ADDR(b,addr);
+	SET_DATA(b,v);
+	SET_FORMAT(b,0x20);
+	SET_COUNT(b,4);
+}
 
 typedef struct {
 	uint32_t start;
@@ -170,38 +213,79 @@ mod_t *load_module(char *path)
 }
 
 
-int send_module(libusb_device_handle *dev, mod_t *mod)
+//int load_image(hid_device *h, void *image, ssize_t size, uint32_t  addr)
+int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 {
-	int sent = 0;
-	int argsz = 0;
-	int err = 0;
+	int n,rc;
+	ssize_t offset = 0;
+	unsigned char b[BUF_SIZE]={0};
 
-	libusb_control_transfer(dev, 0x00, 0xff, mod->size >> 16, mod->size, (unsigned char *)mod->name, strlen(mod->name) + 1, 5000);
-
-	if (libusb_claim_interface(dev, 0)) {
-		printf("Interface claiming error: %s\n", strerror(errno));
-		return 1;
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, mod->size);
+	print_cmd(b+1);
+	printf("CMD_SIZE: %d\n", CMD_SIZE);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
+		goto END;
 	}
 
-	if (mod->args != NULL)
-		argsz = strlen(mod->args) + 1;
-
-	if (argsz > 128) {
-		mod->args[argsz - 1] = 0;
-		printf("Argument list is too long\n");
-		argsz = 128;
-	}
-	if ((err = libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000)) != 0) {
-		printf("Arguments transfer error: %s %s\n", mod->name, libusb_error_name(err));
-		return 1;
+	b[0] = 2;
+	while (offset < mod->size) {
+		n = (BUF_SIZE - 1 > mod->size - offset) ? (mod->size - offset) : (BUF_SIZE - 1);
+		memcpy(b + 1, mod->data + offset, n);
+		offset += n;
+		if((rc = hid_write(dev, b, n + 1)) < 0) {
+			fprintf(stderr, "Failed to send image contents (%d)\n", rc);
+			goto END;
+		}
 	}
 
-	if ((err = libusb_bulk_transfer(dev, 1, mod->data, mod->size, &sent, 5000)) != 0) {
-		printf("Transfer error: %s should be: %lu sent: %d (%s)\n", mod->name, mod->size, sent, libusb_error_name(err));
-		return 1;
+	//Receive report 3
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		rc = -1;
+		goto END;
 	}
+	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
+	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
-	libusb_release_interface(dev, 0);
+END:
+	return rc;
+}
+
+int send_module_old(hid_device *dev, mod_t *mod)
+{
+//	int sent = 0;
+//	int argsz = 0;
+//	int err = 0;
+//
+//	libusb_control_transfer(dev, 0x00, 0xff, mod->size >> 16, mod->size, (unsigned char *)mod->name, strlen(mod->name) + 1, 5000);
+//
+//	if (libusb_claim_interface(dev, 0)) {
+//		printf("Interface claiming error: %s\n", strerror(errno));
+//		return 1;
+//	}
+//
+//	if (mod->args != NULL)
+//		argsz = strlen(mod->args) + 1;
+//
+//	if (argsz > 128) {
+//		mod->args[argsz - 1] = 0;
+//		printf("Argument list is too long\n");
+//		argsz = 128;
+//	}
+//	if ((err = libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000)) != 0) {
+//		printf("Arguments transfer error: %s %s\n", mod->name, libusb_error_name(err));
+//		return 1;
+//	}
+//
+//	if ((err = libusb_bulk_transfer(dev, 1, mod->data, mod->size, &sent, 5000)) != 0) {
+//		printf("Transfer error: %s should be: %lu sent: %d (%s)\n", mod->name, mod->size, sent, libusb_error_name(err));
+//		return 1;
+//	}
+//
+//	libusb_release_interface(dev, 0);
 	return 0;
 }
 
@@ -441,13 +525,35 @@ out:
 }
 
 
+static hid_device* open_device_with_vid_pid(uint16_t vid, uint16_t pid)
+{
+    hid_device* h = NULL;
+	struct hid_device_info* list = hid_enumerate(vid, pid); // Find all devices with given vendor
+	//if (list == NULL)
+	//	fprintf(stderr,"Error getting device list\n");
+
+	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
+		if ((h = hid_open_path(it->path)) == NULL) {
+			fprintf(stderr, "Failed to open device\n");
+			continue;
+		} else {
+			break;
+		}
+	}
+
+	if (list)
+		hid_free_enumeration(list);
+
+	return h;
+}
+
 int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, int plugin)
 {
 	char *mod_tok, *arg_tok;
 	char *mod_p, *arg_p;
 	char *modules;
 	mod_t *mod;
-	libusb_device_handle *dev = NULL;
+	hid_device *dev = NULL;
 	int len = 3;
 
 	if (boot_image(kernel, initrd, NULL, NULL, NULL, plugin)) {
@@ -455,16 +561,9 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		return -1;
 	}
 
-	libusb_context * ctx = NULL;
-	if (libusb_init(&ctx)) {
-		printf("libusb error\n");
-		return 1;
-	}
-	change_libusb_backend(ctx);
-
 	printf("Waiting for the device to boot...");
 	fflush(stdout);
-	while ((dev = libusb_open_device_with_vid_pid(NULL, 0x15a2, 0x007d)) == NULL);
+	while ((dev = open_device_with_vid_pid(0x15a2, 0x007d)) == NULL);
 
 	printf("\rDevice booted                    \n");
 
@@ -497,19 +596,23 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 
 		arg_tok = strtok_r(mod_tok, "=", &arg_p);
 		if ((mod = load_module(arg_tok)) == NULL) {
-			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-			libusb_close(dev);
-			libusb_exit(NULL);
+			//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
+			//libusb_close(dev);
+			//libusb_exit(NULL);
+			hid_close(dev);
+			hid_exit();
 			free(modules);
 			return 1;
 		}
 
 		mod->args = strtok_r(NULL, " ", &arg_p);
 
-		if (send_module(dev, mod)) {
-			libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-			libusb_close(dev);
-			libusb_exit(NULL);
+		if (send_module(dev, mod, 0)) {
+			//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
+			//libusb_close(dev);
+			//libusb_exit(NULL);
+			hid_close(dev);
+			hid_exit();
 			free(modules);
 			free(mod->data);
 			free(mod->name);
@@ -522,10 +625,12 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		mod_tok = strtok_r(NULL, " ", &mod_p);
 	}
 
-	libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-	libusb_close(dev);
-	libusb_exit(ctx);
-	ctx = NULL;
+	//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
+	//libusb_close(dev);
+	//libusb_exit(ctx);
+	//ctx = NULL;
+	hid_close(dev);
+	hid_exit();
 	free(modules);
 	printf("Transfer complete\n");
 	return 0;
