@@ -218,8 +218,19 @@ mod_t *load_module(char *path)
 	return mod;
 }
 
+int send_close_command(hid_device *dev)
+{
+	int rc;
+	unsigned char b[BUF_SIZE]={0};
 
-//int load_image(hid_device *h, void *image, ssize_t size, uint32_t  addr)
+	b[0] = 1;
+	set_write_file_cmd(b + 1, 0, 0);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
+	}
+	return rc;
+}
+
 int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 {
 	int n,rc;
@@ -263,41 +274,6 @@ int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 
 END:
 	return rc;
-}
-
-int send_module_old(hid_device *dev, mod_t *mod)
-{
-//	int sent = 0;
-//	int argsz = 0;
-//	int err = 0;
-//
-//	libusb_control_transfer(dev, 0x00, 0xff, mod->size >> 16, mod->size, (unsigned char *)mod->name, strlen(mod->name) + 1, 5000);
-//
-//	if (libusb_claim_interface(dev, 0)) {
-//		printf("Interface claiming error: %s\n", strerror(errno));
-//		return 1;
-//	}
-//
-//	if (mod->args != NULL)
-//		argsz = strlen(mod->args) + 1;
-//
-//	if (argsz > 128) {
-//		mod->args[argsz - 1] = 0;
-//		printf("Argument list is too long\n");
-//		argsz = 128;
-//	}
-//	if ((err = libusb_bulk_transfer(dev, 1, (unsigned char *)mod->args, argsz, &sent, 5000)) != 0) {
-//		printf("Arguments transfer error: %s %s\n", mod->name, libusb_error_name(err));
-//		return 1;
-//	}
-//
-//	if ((err = libusb_bulk_transfer(dev, 1, mod->data, mod->size, &sent, 5000)) != 0) {
-//		printf("Transfer error: %s should be: %lu sent: %d (%s)\n", mod->name, mod->size, sent, libusb_error_name(err));
-//		return 1;
-//	}
-//
-//	libusb_release_interface(dev, 0);
-	return 0;
 }
 
 
@@ -540,8 +516,6 @@ static hid_device* open_device_with_vid_pid(uint16_t vid, uint16_t pid)
 {
     hid_device* h = NULL;
 	struct hid_device_info* list = hid_enumerate(vid, pid); // Find all devices with given vendor
-	//if (list == NULL)
-	//	fprintf(stderr,"Error getting device list\n");
 
 	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
 		if ((h = hid_open_path(it->path)) == NULL) {
@@ -608,9 +582,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 
 		arg_tok = strtok_r(mod_tok, "=", &arg_p);
 		if ((mod = load_module(arg_tok)) == NULL) {
-			//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-			//libusb_close(dev);
-			//libusb_exit(NULL);
+			send_close_command(dev);
 			hid_close(dev);
 			hid_exit();
 			free(modules);
@@ -620,9 +592,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		mod->args = strtok_r(NULL, " ", &arg_p);
 		printf("Sending module '%s'\n", mod->name);
 		if (send_module(dev, mod, 0)) {
-			//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-			//libusb_close(dev);
-			//libusb_exit(NULL);
+			send_close_command(dev);
 			hid_close(dev);
 			hid_exit();
 			free(modules);
@@ -637,10 +607,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		mod_tok = strtok_r(NULL, " ", &mod_p);
 	}
 
-	//libusb_control_transfer(dev, 0xde, 0xc0, 0xdead, 0xdead, NULL, 0, 5000);
-	//libusb_close(dev);
-	//libusb_exit(ctx);
-	//ctx = NULL;
+	send_close_command(dev);
 	hid_close(dev);
 	hid_exit();
 	free(modules);
