@@ -231,20 +231,81 @@ int send_close_command(hid_device *dev)
 	return rc;
 }
 
-int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
+
+int send_mod_name(hid_device *dev, mod_t *mod, uint32_t addr)
+{
+	int rc;
+	unsigned char b[BUF_SIZE]={0};
+
+	/* Send write command */
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, strlen(mod->name) + 1);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
+		return rc;
+	}
+
+	/* Send name */
+	b[0] = 2;
+	memcpy(b + 1, mod->name, strlen(mod->name) + 1);
+	if((rc = hid_write(dev, b, strlen(mod->name) + 2)) < 0) {
+		fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
+		return rc;
+	}
+	return rc;
+}
+
+
+int send_mod_args(hid_device *dev, mod_t *mod, uint32_t addr)
+{
+	int rc;
+	unsigned char b[BUF_SIZE]={0};
+
+	int argsz = 0;
+	if (mod->args != NULL) {
+		argsz = strlen(mod->args) + 1;
+	}
+
+	if (argsz > 128) {
+		mod->args[argsz - 1] = 0;
+		printf("Argument list is too long\n");
+		argsz = 128;
+	}
+
+	/* Send write command */
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, argsz);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
+		return rc;
+	}
+
+	/* Send arguments */
+	b[0] = 2;
+	memcpy(b + 1, mod->name, argsz);
+	if((rc = hid_write(dev, b, argsz + 1)) < 0) {
+		fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
+		return rc;
+	}
+	return rc;
+}
+
+
+int send_mod_contents(hid_device *dev, mod_t *mod, uint32_t addr)
 {
 	int n,rc;
 	ssize_t offset = 0;
 	unsigned char b[BUF_SIZE]={0};
 
+	/* Send write command */
 	b[0] = 1;
 	set_write_file_cmd(b + 1, addr, mod->size);
-	//print_cmd(b+1);
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
-		goto END;
+		return rc;
 	}
 
+	/* Send contents */
 	b[0] = 2;
 	int i = 0;
 	while (offset < mod->size) {
@@ -252,11 +313,11 @@ int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 		memcpy(b + 1, mod->data + offset, n);
 		offset += n;
 		if ((i++ % 50) == 0) {
-			fprintf(stderr, "\rSent (%d/%d) %5.2f%%     ", offset, mod->size, ((float)offset / (float)mod->size) * 100.0);
+			fprintf(stderr, "\rSent (%ld/%ld) %5.2f%%     ", offset, mod->size, ((float)offset / (float)mod->size) * 100.0);
 		}
 		if((rc = hid_write(dev, b, n + 1)) < 0) {
 			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
-			goto END;
+			return rc;
 		}
 	}
 	fprintf(stderr, "\n");
@@ -266,13 +327,31 @@ int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
 		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
-		goto END;
+		return rc;
 	}
 	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
 	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
 		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
-END:
+	return rc;
+}
+
+
+int send_module(hid_device *dev, mod_t *mod, uint32_t addr)
+{
+	int rc = 0;
+	if ((rc = send_mod_name(dev, mod, addr)) < 0) {
+		return rc;
+	}
+
+	if ((rc = send_mod_args(dev, mod, addr)) < 0) {
+		return rc;
+	}
+
+	if ((rc = send_mod_contents(dev, mod, addr)) < 0) {
+		return rc;
+	}
+
 	return rc;
 }
 
