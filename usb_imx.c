@@ -218,6 +218,14 @@ mod_t *load_module(char *path)
 	return mod;
 }
 
+#define print_buffer(buffer, size) \
+do { \
+	for (int i = 0; (i < size) && (i < BUF_SIZE); i++) { \
+		printf("%02x ", buffer[i]); \
+	} \
+	printf("\n"); \
+} while(0);
+
 int send_close_command(hid_device *dev)
 {
 	int rc;
@@ -280,12 +288,14 @@ int send_mod_args(hid_device *dev, mod_t *mod, uint32_t addr)
 		return rc;
 	}
 
-	/* Send arguments */
-	b[0] = 2;
-	memcpy(b + 1, mod->name, argsz);
-	if((rc = hid_write(dev, b, argsz + 1)) < 0) {
-		fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
-		return rc;
+	if (argsz > 0) {
+		/* Send arguments */
+		b[0] = 2;
+		memcpy(b + 1, mod->args, argsz);
+		if((rc = hid_write(dev, b, argsz + 1)) < 0) {
+			fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
+			return rc;
+		}
 	}
 	return rc;
 }
