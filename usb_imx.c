@@ -208,6 +208,12 @@ mod_t *load_module(char *path)
 }
 
 
+void print_progress(size_t sent, size_t all)
+{
+	fprintf(stderr, "\rSent (%lu/%lu) %5.2f%%     ", sent, all, ((float)sent / (float)all) * 100.0);
+}
+
+
 int send_close_command(hid_device *dev)
 {
 	int rc;
@@ -305,14 +311,16 @@ int send_mod_contents(hid_device *dev, mod_t *mod, uint32_t addr)
 		memcpy(b + 1, mod->data + offset, n);
 		offset += n;
 		if ((i++ % 50) == 0) {
-			fprintf(stderr, "\rSent (%ld/%ld) %5.2f%%     ", offset, mod->size, ((float)offset / (float)mod->size) * 100.0);
+			print_progress(offset, mod->size);
 		}
 		if((rc = hid_write(dev, b, n + 1)) < 0) {
+			print_progress(offset, mod->size);
 			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
 			return rc;
 		}
 	}
-	fprintf(stderr, "\n");
+	print_progress(offset, mod->size);
+	printf("\n");
 	return 0; // ignore report 3 and 4 for now
 
 	//Receive report 3
