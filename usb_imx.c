@@ -26,15 +26,6 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
-//#include <libusb-1.0/libusb.h>
-//#if defined(__CYGWIN__)
-//# if !defined(LIBUSB_API_VERSION) || (LIBUSB_API_VERSION < 0x01000106)
-//#  error "libusb API version too low. Reqiured minimum 0x01000106"
-//# endif
-//# define change_libusb_backend(ctx_ptr) libusb_set_option(ctx_ptr, LIBUSB_OPTION_USE_USBDK)
-//#else
-//# define change_libusb_backend(ctx_ptr)
-//#endif
 #include <hidapi/hidapi.h>
 
 
@@ -59,12 +50,6 @@
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
 
-static void print_cmd(unsigned char* b)
-{
-	printf("Command:\n  type=%02x%02x, addr=%08x, format=%02x, count=%08x, data=%08x\n",b[0],b[1],*(uint32_t*)(b+2),b[6],*(uint32_t*)(b+7),*(uint32_t*)(b+11));
-
-}
-
 static inline void set_write_file_cmd(unsigned char* b, uint32_t addr, uint32_t size)
 {
 	SET_CMD_TYPE(b,0x04);
@@ -73,6 +58,7 @@ static inline void set_write_file_cmd(unsigned char* b, uint32_t addr, uint32_t 
 	SET_FORMAT(b,0x20);
 }
 
+
 static inline void set_jmp_cmd(unsigned char* b, uint32_t addr)
 {
 	SET_CMD_TYPE(b,0x0b);
@@ -80,10 +66,12 @@ static inline void set_jmp_cmd(unsigned char* b, uint32_t addr)
 	SET_FORMAT(b,0x20);
 }
 
+
 static inline void set_status_cmd(unsigned char* b)
 {
 	SET_CMD_TYPE(b,0x05);
 }
+
 
 static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v)
 {
@@ -93,6 +81,7 @@ static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v
 	SET_FORMAT(b,0x20);
 	SET_COUNT(b,4);
 }
+
 
 typedef struct {
 	uint32_t start;
@@ -218,13 +207,6 @@ mod_t *load_module(char *path)
 	return mod;
 }
 
-#define print_buffer(buffer, size) \
-do { \
-	for (int i = 0; (i < size) && (i < BUF_SIZE); i++) { \
-		printf("%02x ", buffer[i]); \
-	} \
-	printf("\n"); \
-} while(0);
 
 int send_close_command(hid_device *dev)
 {
