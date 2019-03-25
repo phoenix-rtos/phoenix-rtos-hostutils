@@ -87,8 +87,6 @@ static int open_vybrid(hid_device** h)
 {
 	int retval = 0;
 	struct hid_device_info* list = hid_enumerate(0x15a2, 0x0); // Find all devices with given vendor
-	if (list == NULL)
-		fprintf(stderr,"Error getting device list\n");
 
 	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
 		if ((it->product_id == 0x0080) || (it->product_id == 0x007d) || (it->product_id == 0x006a)) {
