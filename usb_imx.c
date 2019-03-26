@@ -669,7 +669,7 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		}
 
 		mod->args = strtok_r(NULL, " ", &arg_p);
-		printf("Sending module '%s'\n", mod->name);
+		printf("Sending module '%s'\n", mod->name + 1);
 		if (send_module(dev, mod, 0)) {
 			send_close_command(dev);
 			hid_close(dev);
