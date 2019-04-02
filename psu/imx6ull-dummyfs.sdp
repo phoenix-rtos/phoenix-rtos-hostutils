@@ -1,0 +1,7 @@
+WAIT
+WRITE_FILE ../_fs/arm-imx6ull/phoenix-kernel.img 0 0xac000000 16384
+REBOOT
+WAIT
+WRITE_FILE ../_fs/arm-imx6ull/phoenix-kernel.img 16384 0xac000000
+ARGS "Ximx6ull-uart Xdummyfs Xpsh"
+JUMP_ADDRESS 0xac000000
