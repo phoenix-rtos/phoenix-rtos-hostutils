@@ -22,9 +22,9 @@
 #include <stdlib.h>
 #include <getopt.h>
 
-#include "types.h"
-#include "errors.h"
-#include "serial.h"
+#include "../common/types.h"
+#include "../common/errors.h"
+#include "../common/serial.h"
 #include "bsp.h"
 #include "msg_udp.h"
 #include "dispatch.h"

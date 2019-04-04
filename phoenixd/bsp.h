@@ -18,7 +18,7 @@
 #define _BSP_H_
 
 
-#include "types.h"
+#include "../common/types.h"
 
 
 /* BSP sizes */

@@ -21,8 +21,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#include "errors.h"
-#include "serial.h"
+#include "../common/errors.h"
+#include "../common/serial.h"
 #include "msg.h"
 #include "dispatch.h"
 #include "phfs.h"

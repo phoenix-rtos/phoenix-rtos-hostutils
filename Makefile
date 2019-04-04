@@ -1,17 +1,36 @@
 #
-# phoenixd -  Phoenix server
+# Makefile for phoenix-rtos-hostutils
 #
-# Copyright 2018 Phoenix Systems
+# Copyright 2018, 2019 Phoenix Systems
 # Copyright 2001 Pawel Pisarczyk
 #
+# %LICENSE%
+#
 
-SIL = @
+SIL ?= @
+MAKEFLAGS += --no-print-directory
+
 CC = gcc
 CFLAGS = -c -Wall -I . -O2 -g
 LD = gcc
-LDFLAGS = -lm -lusb-1.0
+TARGET := host
+STRIP = strip
 
-OBJS = serial.o bsp.o dispatch.o msg.o msg_udp.o phfs.o phoenixd.o usb_vybrid.o usb_imx.o
+TOPDIR := $(CURDIR)
+PREFIX_BUILD := ../_build/$(TARGET)
+PREFIX_BUILD := $(abspath $(PREFIX_BUILD))
+BUILD_DIR := $(PREFIX_BUILD)/$(notdir $(TOPDIR))
+BUILD_DIR := $(abspath $(BUILD_DIR))
+
+PREFIX_BOOT := $(realpath "_boot")
+
+# build artifacts dir
+CURR_SUFFIX := $(patsubst $(TOPDIR)/%,%,$(abspath $(CURDIR))/)
+PREFIX_O := $(BUILD_DIR)/$(CURR_SUFFIX)
+
+PREFIX_PROG := $(PREFIX_BUILD)/prog/
+PREFIX_PROG_STRIPPED := $(PREFIX_BUILD)/prog.stripped/
+
 detected_OS := $(shell uname)
 ifeq ($(detected_OS),Linux)
 	LDFLAGS += -lhidapi-hidraw
@@ -19,23 +38,44 @@ else
 	LDFLAGS += -lhidapi
 endif
 
+ARCH =  $(SIL)@mkdir -p $(@D); \
+	(printf "AR  %-24s\n" "$(@F)"); \
+	$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
 
-all: phoenixd
+LINK = $(SIL)mkdir -p $(@D); \
+	(printf "LD  %-24s\n" "$(@F)"); \
+	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS)
 
-.c.o:
-	@echo "CC" $<
-	$(SIL)$(CC) $(CFLAGS) $<
+HEADER = $(SIL)mkdir -p $(@D); \
+	(printf "HEADER %-24s\n" "$<"); \
+	cp -pR "$<" "$@"
 
-$(OBJS): serial.h bsp.h errors.h elf.h
+$(PREFIX_O)%.o: %.c
+	@mkdir -p $(@D)
+	$(SIL)(printf "CC  %-24s\n" "$<")
+	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
+	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
 
-phoenixd: $(OBJS)
-	@echo "LINK" $@
-	$(SIL)$(LD) -o $@ $(OBJS) $(LDFLAGS)
+$(PREFIX_O)%.o: %.S
+	@mkdir -p $(@D)
+	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
+	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
+	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
+
+$(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
+	@mkdir -p $(@D)
+	@(printf "STR %-24s\n" "$(@F)")
+	$(SIL)$(STRIP) -o $@ $<
 
 .PHONY: clean
 clean:
-	@echo "CLEAN"
+	@echo "rm -rf $(BUILD_DIR)"
+
+include phoenixd/Makefile
+include psu/Makefile
+
+all: $(PREFIX_PROG_STRIPPED)phoenixd $(PREFIX_PROG_STRIPPED)psu
 
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
-	$(shell rm -rf *.o core)
+	$(shell rm -rf $(BUILD_DIR))
 endif

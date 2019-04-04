@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP2 protocol implementation
@@ -16,7 +16,7 @@
 #ifndef _MSG_UDP_H_
 #define _MSG_UDP_H_
 
-#include "types.h"
+#include "../common/types.h"
 #include "msg.h"
 
 #define PHFS_DEFPORT	11520

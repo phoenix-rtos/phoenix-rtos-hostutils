@@ -22,13 +22,16 @@
 #include <stdlib.h>
 #include <getopt.h>
 
-#include "types.h"
-#include "errors.h"
-#include "serial.h"
-#include "bsp.h"
-#include "msg_udp.h"
-#include "dispatch.h"
+#include "../common/types.h"
+#include "../common/errors.h"
+#include "../common/serial.h"
+#include "../phoenixd/bsp.h"
+#include "../phoenixd/msg_udp.h"
+#include "../phoenixd/dispatch.h"
 
+enum {
+	SDP
+};
 
 extern char *optarg;
 
@@ -82,6 +85,12 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 }
 
 
+int sdp_execute(void *dev)
+{
+	return 0;
+}
+
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -97,12 +106,14 @@ int main(int argc, char *argv[])
 	char *console = NULL;
 	char *append = NULL;
 	char *output = NULL;
+	void *dev = NULL;
 
 	char *sysdir = "../sys";
 	char *ttys[8];
 	mode_t mode[8] = {SERIAL};
 	int k, i = 0;
 	int res, st;
+	int type, proto;
 
 	struct option long_opts[] = {
 		{"sdp", no_argument, &sdp, 1},
@@ -135,10 +146,11 @@ int main(int argc, char *argv[])
 	}
 
 	switch (type) {
-	
+	}
 
 	if (proto == SDP) {
 		sdp_execute(dev);
+	}
 
 	return 0;
 }

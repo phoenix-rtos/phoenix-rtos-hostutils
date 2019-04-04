@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * BSP2 protocol implementation
@@ -16,8 +16,8 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "errors.h"
-#include "serial.h"
+#include "../common/errors.h"
+#include "../common/serial.h"
 #include "msg.h"
 
 
@@ -43,18 +43,18 @@ int msg_serial_send(int fd, msg_t *msg, u16 seq)
 	unsigned int k;
 	u8 buff[MSG_MAXLEN * 2 + MSG_HDRSZ * 2];
 	unsigned int i = 0;
-	
+
 	msg_setseq(msg, seq);
 	msg_setcsum(msg, msg_csum(msg));
 	cs[0] = MSG_MARK;
-	
+
 	if (msg_getlen(msg) > MSG_MAXLEN)
 		return ERR_MSG_ARG;
 
 	buff[i++] = cs[0];
-	
+
 	for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
-	
+
 		if ((p[k] == MSG_MARK) || (p[k] == MSG_ESC)) {
 			cs[0] = MSG_ESC;
 			if (p[k] == MSG_MARK)
@@ -79,26 +79,26 @@ int msg_serial_recv(int fd, msg_t *msg, int *state)
 	int escfl = 0;
 	unsigned int l = 0;
 	u8 c;
-	
+
 	for (;;) {
 		if (serial_read(fd, &c, 1, 0) < 0) {
 			*state = MSGRECV_DESYN;
 			return ERR_MSG_IO;
 		}
-			
+
 		if (*state == MSGRECV_FRAME) {
-			
+
 			/* Return error if frame is to long */
 			if (l == MSG_HDRSZ + MSG_MAXLEN) {
 				*state = MSGRECV_DESYN;
 				return ERR_MSG_IO;
 			}
-				
+
 			/* Return error if terminator discovered */
 			if (c == MSG_MARK) {
 				return ERR_MSG_IO;
 			}
-			
+
 			if (!escfl && (c == MSG_ESC)) {
 				escfl = 1;
 				continue;
@@ -107,12 +107,12 @@ int msg_serial_recv(int fd, msg_t *msg, int *state)
 				if (c == MSG_ESCMARK)
 					c = MSG_MARK;
 				if (c == MSG_ESCESC)
-					c = MSG_ESC;			
+					c = MSG_ESC;
 				escfl = 0;
 			}
 			*((u8 *)msg + l++) = c;
-			
-			/* Frame received */ 
+
+			/* Frame received */
 			if ((l >= MSG_HDRSZ) && (l == msg_getlen(msg) + MSG_HDRSZ)) {
 				*state = MSGRECV_DESYN;
 				break;
@@ -124,7 +124,7 @@ int msg_serial_recv(int fd, msg_t *msg, int *state)
 				*state = MSGRECV_FRAME;
 		}
 	}
-	
+
 	/* Verify received message */
 	//if (msg->csum != msg_csum(msg)) {
 	//	return ERR_MSG_IO;

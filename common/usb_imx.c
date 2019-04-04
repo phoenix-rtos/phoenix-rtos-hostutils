@@ -29,7 +29,7 @@
 #include <hidapi/hidapi.h>
 
 
-#include "dispatch.h"
+#include "../phoenixd/dispatch.h"
 
 #define SIZE_PAGE 0x1000
 #define SYSPAGESZ_MAX 0x400

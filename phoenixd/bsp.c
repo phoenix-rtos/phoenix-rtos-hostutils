@@ -21,9 +21,9 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
-#include "types.h"
-#include "errors.h"
-#include "serial.h"
+#include "../common/types.h"
+#include "../common/errors.h"
+#include "../common/serial.h"
 #include "bsp.h"
 #include "elf.h"
 
