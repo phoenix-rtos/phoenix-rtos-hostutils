@@ -29,6 +29,8 @@
 #include "../phoenixd/msg_udp.h"
 #include "../phoenixd/dispatch.h"
 
+#include <hidapi/hidapi.h>
+
 enum {
 	SDP
 };
@@ -92,8 +94,36 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 }
 
 
-int sdp_execute(void *dev)
+hid_device *open_device_with_vid_pid(uint16_t vid, uint16_t pid)
 {
+    hid_device* h = NULL;
+	struct hid_device_info* list = hid_enumerate(vid, pid); // Find all devices with given vendor
+
+	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
+		if ((h = hid_open_path(it->path)) == NULL) {
+			fprintf(stderr, "Failed to open device\n");
+			continue;
+		} else {
+			break;
+		}
+	}
+
+	if (list)
+		hid_free_enumeration(list);
+
+	return h;
+}
+
+
+int wait_cmd(hid_device **dev)
+{
+	int retries = 0;
+	while ((*dev = open_device_with_vid_pid(0x15a2, 0x0)) == NULL) {
+		if (retries++ > 10)
+			return -1;
+		sleep(1);
+	}
+
 	return 0;
 }
 
