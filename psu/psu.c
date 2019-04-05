@@ -303,7 +303,6 @@ int decode_line(char *line, size_t len, size_t lineno)
 		if (!strcmp(tok, "WAIT")) {
 
 		} else if(!strcmp(tok, "WRITE_FILE")) {
-		} else if(!strcmp(tok, "REBOOT")) {
 		} else if(!strcmp(tok, "ARGS")) {
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
 		} else if(!strcmp(tok, "DCD_WRITE")) {
