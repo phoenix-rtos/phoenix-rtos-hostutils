@@ -21,6 +21,8 @@
 #include <termios.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <stdint.h>
+#include <arpa/inet.h>
 
 #include "../common/types.h"
 #include "../common/errors.h"
@@ -30,6 +32,17 @@
 #include "../phoenixd/dispatch.h"
 
 #include <hidapi/hidapi.h>
+
+/* SDP protocol section */
+#define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
+#define SET_ADDR(b,v) *((uint32_t*)((b)+2))=htonl(v)
+#define SET_COUNT(b,v) *((uint32_t*)((b)+7))=htonl(v);
+#define SET_DATA(b,v) *((uint32_t*)((b)+11))=htonl(v);
+#define SET_FORMAT(b,v) (b)[6]=(v);
+
+#define CMD_SIZE 17
+#define BUF_SIZE 1025
+#define INTERRUPT_SIZE 65
 
 enum {
 	SDP
@@ -94,6 +107,47 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 }
 
 
+static inline void set_write_file_cmd(unsigned char* b, uint32_t addr, uint32_t size)
+{
+	SET_CMD_TYPE(b,0x04);
+	SET_ADDR(b,addr);
+	SET_COUNT(b,size);
+	SET_FORMAT(b,0x20);
+}
+
+
+static inline void set_dcd_write_cmd(unsigned char* b, uint32_t addr, uint32_t size)
+{
+	SET_CMD_TYPE(b,0x0a);
+	SET_ADDR(b,addr);
+	SET_COUNT(b,size);
+}
+
+
+static inline void set_jmp_cmd(unsigned char* b, uint32_t addr)
+{
+	SET_CMD_TYPE(b,0x0b);
+	SET_ADDR(b,addr);
+	SET_FORMAT(b,0x20);
+}
+
+
+static inline void set_status_cmd(unsigned char* b)
+{
+	SET_CMD_TYPE(b,0x05);
+}
+
+
+static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v)
+{
+	SET_CMD_TYPE(b,0x02);
+	SET_ADDR(b,addr);
+	SET_DATA(b,v);
+	SET_FORMAT(b,0x20);
+	SET_COUNT(b,4);
+}
+
+
 hid_device *open_device_with_vid_pid(uint16_t vid, uint16_t pid)
 {
     hid_device* h = NULL;
@@ -125,6 +179,86 @@ int wait_cmd(hid_device **dev)
 	}
 
 	return 0;
+}
+
+
+int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
+{
+	int n, rc;
+	ssize_t offset = 0;
+	unsigned char b[BUF_SIZE]={0};
+
+	/* Send write command */
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, size);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
+		return rc;
+	}
+
+	/* Send contents */
+	b[0] = 2;
+	while (offset < size) {
+		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
+		memcpy(b + 1, data + offset, n);
+		offset += n;
+		if((rc = hid_write(dev, b, n + 1)) < 0) {
+			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
+			return rc;
+		}
+	}
+
+	//Receive report 3
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		rc = -1;
+		return rc;
+	}
+
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+
+	return rc;
+}
+
+
+int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size)
+{
+	int n, rc;
+	ssize_t offset = 0;
+	unsigned char b[BUF_SIZE]={0};
+
+	/* Send write command */
+	b[0] = 1;
+	set_dcd_write_cmd(b + 1, addr, size);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send dcd_write command (%d)\n", rc);
+		return rc;
+	}
+
+	/* Send contents */
+	b[0] = 2;
+	while (offset < size) {
+		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
+		memcpy(b + 1, data + offset, n);
+		offset += n;
+		if((rc = hid_write(dev, b, n + 1)) < 0) {
+			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
+			return rc;
+		}
+	}
+
+	//Receive report 3
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		rc = -1;
+		return rc;
+	}
+
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x12a8a812)
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+
+	return rc;
 }
 
 
