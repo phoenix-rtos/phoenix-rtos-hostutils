@@ -38,6 +38,13 @@ extern char *optarg;
 
 #define VERSION "1.3"
 
+
+void usage(char *progname)
+{
+	printf("Usage: %s script_path\n", progname);
+}
+
+
 int phoenixd_session(char *tty, char *kernel, char *sysdir)
 {
 	u8 t;
@@ -91,7 +98,68 @@ int sdp_execute(void *dev)
 }
 
 
+int decode_line(char *line, size_t len, size_t lineno)
+{
+	int err = 0;
+	char *tok = strtok(line, " ");
+	size_t toklen = strlen(tok);
+
+	if (tok[0] != '\n' && tok[0] != '#') { /* Skip empty lines and comments */
+		if (tok[toklen - 1] == '\n') {
+			tok[--toklen] = '\0';
+		}
+
+		fprintf(stderr, "Parsing %lu: '%s'\n", lineno, tok);
+
+		if (!strcmp(tok, "WAIT")) {
+
+		} else if(!strcmp(tok, "WRITE_FILE")) {
+		} else if(!strcmp(tok, "REBOOT")) {
+		} else if(!strcmp(tok, "ARGS")) {
+		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
+		} else if(!strcmp(tok, "DCD_WRITE")) {
+		} else if(!strcmp(tok, "PROMPT")) {
+		} else if(!strcmp(tok, "REBOOT")) {
+		} else {
+			fprintf(stderr, "Unrecognized token '%s' at line %lu\n", tok, lineno);
+			err = -1;
+		}
+	}
+	return err;
+}
+
+
 int main(int argc, char *argv[])
+{
+	FILE *script;
+	int res;
+	size_t len = 1024, lineno = 0;
+	char *buff = malloc(len);
+	hid_device *dev;
+
+	if (argc != 2) {
+		usage(argv[0]);
+		return -1;
+	}
+
+	/* Interpret script */
+	script = fopen(argv[1], "r");
+	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
+		if ((res = decode_line(buff, res, lineno++)) < 0) {
+			res = -1;
+			break;
+		}
+	}
+
+	free(buff);
+	if (script) {
+		fclose(script);
+	}
+	return res;
+}
+
+#if 0
+int main_old(int argc, char *argv[])
 {
 	int c;
 	int ind;
@@ -154,3 +222,4 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+#endif
