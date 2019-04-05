@@ -262,6 +262,31 @@ int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size)
 }
 
 
+int sdp_jmpAddr(hid_device *dev, uint32_t addr)
+{
+	int n, rc;
+	ssize_t offset = 0;
+	unsigned char b[BUF_SIZE]={0};
+
+	/* Send write command */
+	b[0] = 1;
+	set_jmp_cmd(b + 1, addr);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send jump_address command (%d)\n", rc);
+		return rc;
+	}
+
+	/* Receive report 3 */
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		rc = -1;
+		return rc;
+	}
+
+	return rc;
+}
+
+
 int decode_line(char *line, size_t len, size_t lineno)
 {
 	int err = 0;
