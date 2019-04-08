@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <termios.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -32,6 +34,8 @@
 #include "../phoenixd/dispatch.h"
 
 #include "../common/hid.h"
+
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 /* SDP protocol section */
 #define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
@@ -48,8 +52,19 @@ enum {
 	SDP
 };
 
+
+typedef struct {
+	int fd;
+	unsigned int size;
+	void *data;
+} write_file_buff_t;
+
+
 extern char *optarg;
 
+static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size);
+static int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size);
+static int sdp_jmpAddr(hid_device *dev, uint32_t addr);
 
 #define VERSION "1.3"
 
@@ -164,6 +179,71 @@ int wait_cmd(hid_device **dev)
 	}
 
 	return 0;
+}
+
+
+int get_buffer(char type, char *str, write_file_buff_t *buff)
+{
+	int err = -1;
+	if (type == 'F') {
+		struct stat statbuf;
+		buff->fd = open(str, O_RDONLY);
+		fstat(buff->fd, &statbuf);
+		buff->size = statbuf.st_size;
+		buff->data = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, buff->fd, 0);
+		if (buff->data != NULL)
+			err = 0;
+	} else if (type == 'S') {
+		/* TODO: Parse special cases (hex values, etc) */
+		buff->size = strlen(str);
+		buff->data = str;
+		err = 0;
+	}
+	return err;
+}
+
+
+int close_buffer(char type, write_file_buff_t *buff)
+{
+	int err = -1;
+	if (type == 'F') {
+		close(buff->fd);
+		err = munmap(buff->data, buff->size);
+	}
+	return err;
+}
+
+
+int write_file_cmd(hid_device *dev)
+{
+	long int offset = 0, addr = 0, size = 0;
+	int res;
+	write_file_buff_t buff;
+
+	char *type = strtok(NULL, " ");
+	strtok(NULL, "\""); 				/* Skip first quote */
+	char *str = strtok(NULL, "\"");
+	char *tok = strtok(NULL, " ");
+	if (tok != NULL) {
+		 offset = strtol(tok, NULL, 0);
+		 tok = strtok(NULL, " ");
+	}
+	if (tok != NULL) {
+		 addr = strtol(tok, NULL, 0);
+		 tok = strtok(NULL, " ");
+	}
+	if (tok != NULL) {
+		 size = strtol(tok, NULL, 0);
+	}
+
+	get_buffer(*type, str, &buff);
+	if (size) {
+		size = MIN(size, buff.size);
+	}
+	res = sdp_writeFile(dev, addr, buff.data, size);
+	close_buffer(*type, &buff);
+
+	return res;
 }
 
 
@@ -285,9 +365,9 @@ int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 		fprintf(stderr, "Parsing %lu: '%s'\n", lineno, tok);
 
 		if (!strcmp(tok, "WAIT")) {
-			wait_cmd(dev);
+			err = wait_cmd(dev);
 		} else if(!strcmp(tok, "WRITE_FILE")) {
-		} else if(!strcmp(tok, "ARGS")) {
+			err = write_file_cmd(*dev);
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
 		} else if(!strcmp(tok, "DCD_WRITE")) {
 		} else if(!strcmp(tok, "PROMPT")) {
