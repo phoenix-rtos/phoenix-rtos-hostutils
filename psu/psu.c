@@ -62,6 +62,7 @@ typedef struct {
 
 extern char *optarg;
 
+static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t data);
 static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size);
 static int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size);
 static int sdp_jmpAddr(hid_device *dev, uint32_t addr);
@@ -153,13 +154,12 @@ static inline void set_status_cmd(unsigned char* b)
 }
 
 
-static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v)
+static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint8_t format, uint32_t data)
 {
 	SET_CMD_TYPE(b,0x02);
 	SET_ADDR(b,addr);
-	SET_DATA(b,v);
-	SET_FORMAT(b,0x20);
-	SET_COUNT(b,4);
+	SET_FORMAT(b,format);
+	SET_DATA(b, data);
 }
 
 
@@ -179,6 +179,20 @@ int wait_cmd(hid_device **dev)
 	}
 
 	return 0;
+}
+
+
+int write_reg_cmd(hid_device *dev)
+{
+	long int addr, data, format;
+	char *tok = strtok(NULL, " ");
+	addr = strtol(tok, NULL, 0);
+	tok = strtok(NULL, " ");
+	data = strtol(tok, NULL, 0);
+	tok = strtok(NULL, " ");
+	format = strtol(tok, NULL, 0);
+
+	return sdp_writeRegister(dev, addr, format, data);
 }
 
 
@@ -246,6 +260,33 @@ int write_file_cmd(hid_device *dev)
 	close_buffer(*type, &buff);
 
 	return res;
+}
+
+
+int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t data)
+{
+	int rc;
+	unsigned char b[BUF_SIZE]={0};
+
+	/* Send write command */
+	b[0] = 1;
+	set_write_reg_cmd(b + 1, addr, format, data);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send write_register command (%d)\n", rc);
+		return rc;
+	}
+
+	//Receive report 3
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		rc = -1;
+		return rc;
+	}
+
+	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x128a8a12)
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+
+	return rc;
 }
 
 
@@ -370,6 +411,8 @@ int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 			err = wait_cmd(dev);
 		} else if(!strcmp(tok, "WRITE_FILE")) {
 			err = write_file_cmd(*dev);
+		} else if(!strcmp(tok, "WRITE_REGISTER")) {
+			err = write_reg_cmd(*dev);
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
 		} else if(!strcmp(tok, "DCD_WRITE")) {
 		} else if(!strcmp(tok, "PROMPT")) {
