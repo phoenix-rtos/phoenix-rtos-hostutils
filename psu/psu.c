@@ -31,7 +31,7 @@
 #include "../phoenixd/msg_udp.h"
 #include "../phoenixd/dispatch.h"
 
-#include <hidapi/hidapi.h>
+#include "../common/hid.h"
 
 /* SDP protocol section */
 #define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
@@ -148,31 +148,16 @@ static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint32_t v
 }
 
 
-hid_device *open_device_with_vid_pid(uint16_t vid, uint16_t pid)
-{
-    hid_device* h = NULL;
-	struct hid_device_info* list = hid_enumerate(vid, pid); // Find all devices with given vendor
-
-	for (struct hid_device_info* it = list; it != NULL; it = it->next) {
-		if ((h = hid_open_path(it->path)) == NULL) {
-			fprintf(stderr, "Failed to open device\n");
-			continue;
-		} else {
-			break;
-		}
-	}
-
-	if (list)
-		hid_free_enumeration(list);
-
-	return h;
-}
-
-
 int wait_cmd(hid_device **dev)
 {
+	long int vid, pid;
+	char *tok = strtok(NULL, " ");
+	vid = strtol(tok, NULL, 0);
+	tok = strtok(NULL, " ");
+	pid = strtol(tok, NULL, 0);
+
 	int retries = 0;
-	while ((*dev = open_device_with_vid_pid(0x15a2, 0x0)) == NULL) {
+	while ((*dev = open_device(vid, pid)) == NULL) {
 		if (retries++ > 10)
 			return -1;
 		sleep(1);
@@ -264,8 +249,7 @@ int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size)
 
 int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 {
-	int n, rc;
-	ssize_t offset = 0;
+	int rc;
 	unsigned char b[BUF_SIZE]={0};
 
 	/* Send write command */
@@ -287,7 +271,7 @@ int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 }
 
 
-int decode_line(char *line, size_t len, size_t lineno)
+int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 {
 	int err = 0;
 	char *tok = strtok(line, " ");
@@ -301,7 +285,7 @@ int decode_line(char *line, size_t len, size_t lineno)
 		fprintf(stderr, "Parsing %lu: '%s'\n", lineno, tok);
 
 		if (!strcmp(tok, "WAIT")) {
-
+			wait_cmd(dev);
 		} else if(!strcmp(tok, "WRITE_FILE")) {
 		} else if(!strcmp(tok, "ARGS")) {
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
@@ -320,7 +304,7 @@ int decode_line(char *line, size_t len, size_t lineno)
 int main(int argc, char *argv[])
 {
 	FILE *script;
-	int res;
+	int res = 0;
 	size_t len = 1024, lineno = 0;
 	char *buff = malloc(len);
 	hid_device *dev;
@@ -333,16 +317,17 @@ int main(int argc, char *argv[])
 	/* Interpret script */
 	script = fopen(argv[1], "r");
 	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
-		if ((res = decode_line(buff, res, lineno++)) < 0) {
+		if ((res = execute_line(buff, res, lineno++, &dev)) < 0) {
 			res = -1;
 			break;
 		}
 	}
 
-	free(buff);
+	hid_close(dev);
 	if (script) {
 		fclose(script);
 	}
+	free(buff);
 	return res;
 }
 
