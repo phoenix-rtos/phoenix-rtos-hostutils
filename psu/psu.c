@@ -66,6 +66,7 @@ static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uin
 static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size);
 static int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size);
 static int sdp_jmpAddr(hid_device *dev, uint32_t addr);
+static int sdp_errStatus(hid_device *dev);
 
 #define VERSION "1.3"
 
@@ -203,6 +204,12 @@ int jump_addr_cmd(hid_device *dev)
 	addr = strtol(tok, NULL, 0);
 
 	return sdp_jmpAddr(dev, addr);
+}
+
+
+int err_status_cmd(hid_device *dev)
+{
+	return sdp_errStatus(dev);
 }
 
 
@@ -403,6 +410,30 @@ int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 }
 
 
+int sdp_errStatus(hid_device* dev)
+{
+	unsigned char b[BUF_SIZE]={0};
+	int rc;
+	b[0]=1;
+	set_status_cmd(b+1);
+
+	if((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send status command (%d)\n", rc);
+		return rc;
+	}
+	if((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		return rc;
+	}
+	if((rc = hid_read(dev, b, BUF_SIZE)) < 0) {
+		fprintf(stderr, "Failed to receive status (n=%d)\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+
 int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 {
 	int err = 0;
@@ -424,6 +455,8 @@ int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 			err = write_reg_cmd(*dev);
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
 			err = jump_addr_cmd(*dev);
+		} else if(!strcmp(tok, "ERROR_STATUS")) {
+			err = err_status_cmd(*dev);
 		} else if(!strcmp(tok, "DCD_WRITE")) {
 		} else if(!strcmp(tok, "PROMPT")) {
 		} else if(!strcmp(tok, "REBOOT")) {
