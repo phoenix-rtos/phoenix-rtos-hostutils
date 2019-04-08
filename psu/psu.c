@@ -245,7 +245,6 @@ int write_file_cmd(hid_device *dev)
 	write_file_buff_t buff;
 
 	char *type = strtok(NULL, " ");
-	strtok(NULL, "\""); 				/* Skip first quote */
 	char *str = strtok(NULL, "\"");
 	char *tok = strtok(NULL, " ");
 	if (tok != NULL) {
