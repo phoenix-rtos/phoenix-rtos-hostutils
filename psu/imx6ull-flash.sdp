@@ -2,8 +2,8 @@
 # WAIT <vid> <pid>
 # WRITE_FILE <F/S> <quoted string> [offset] [address] [size]
 # Example:
-#    WRITE_FILE F "phoenix-kernel.img" 0 0xac000000 16384   # off=0 addr=0xac000000 size=16384
-#    WRITE_FILE F "phoenix-kernel.img" 16384 0xac000000     # off=16384 addr=0xac000000 size=<whole file>
+#    WRITE_FILE F "phoenix-arm-imx6ull.img" 0 0xac000000 16384   # off=0 addr=0xac000000 size=16384
+#    WRITE_FILE F "phoenix-arm-imx6ull.img" 16384 0xac000000     # off=16384 addr=0xac000000 size=<whole file>
 # WRITE_REGISTER <address> <value> <format 8/16/32>
 # Example:
 #    WRITE_REGISTER -1 0 8 # special register -1 for psd, switches file to file 0
@@ -13,13 +13,13 @@
 WAIT 0x15a2 0x80
 
 # load kernel part with DCD initializing DDR
-WRITE_FILE F "../_fs/arm-imx6ull/phoenix-kernel.img" 0 0xac000000 16384
+WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 0 0xac000000 16384
 #JUMP_ADDRESS <ivt_addr>
 JUMP_ADDRESS 0x3f000400
 
 # Load the rest of kernel
-#WRITE_FILE F ../_fs/arm-imx6ull/phoenix-kernel.img 0 <ddr_addr>
-WRITE_FILE "../_boot/arm-imx6ull/phoenix-kernel.img" 16384 0xac000000
+#WRITE_FILE F ../_fs/arm-imx6ull/phoenix-arm-imx6ull.img 0 <ddr_addr>
+WRITE_FILE "../_boot/phoenix-arm-imx6ull.img" 16384 0xac000000
 
 # Save args to syspage
 WRITE_FILE S "Ximx6ull-uart;Xdummyfs;Xpsd /dev/flash0 /dev/flash1" # check if separated with 0
@@ -27,6 +27,6 @@ JUMP_ADDRESS 0xac000000
 
 # wait for psd and write files to flash
 WAIT 0x15a2 0x7d
-WRITE_FILE "../_boot/arm-imx6ull/root.img"
+WRITE_FILE "../_boot/rootfs.img"
 WRITE_REGISTER -1 1 8 # switch to second flash
-WRITE_FILE "../_boot/arm-imx6ull/root.img"
+WRITE_FILE "../_boot/rootfs.img"
