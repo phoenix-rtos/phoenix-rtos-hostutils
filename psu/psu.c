@@ -196,6 +196,16 @@ int write_reg_cmd(hid_device *dev)
 }
 
 
+int jump_addr_cmd(hid_device *dev)
+{
+	long int addr;
+	char *tok = strtok(NULL, " ");
+	addr = strtol(tok, NULL, 0);
+
+	return sdp_jmpAddr(dev, addr);
+}
+
+
 int get_buffer(char type, char *str, write_file_buff_t *buff)
 {
 	int err = -1;
@@ -414,6 +424,7 @@ int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
 		} else if(!strcmp(tok, "WRITE_REGISTER")) {
 			err = write_reg_cmd(*dev);
 		} else if(!strcmp(tok, "JUMP_ADDRESS")) {
+			err = jump_addr_cmd(*dev);
 		} else if(!strcmp(tok, "DCD_WRITE")) {
 		} else if(!strcmp(tok, "PROMPT")) {
 		} else if(!strcmp(tok, "REBOOT")) {
