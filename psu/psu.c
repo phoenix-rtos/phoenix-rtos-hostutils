@@ -176,6 +176,7 @@ int wait_cmd(hid_device **dev)
 	pid = strtol(tok, NULL, 0);
 
 	int retries = 0;
+	sleep(1);
 	while ((*dev = open_device(vid, pid)) == NULL) {
 		if (retries++ > 10)
 			return -1;
@@ -485,6 +486,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	hid_init();
 	/* Interpret script */
 	script = fopen(argv[1], "r");
 	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
@@ -498,6 +500,7 @@ int main(int argc, char *argv[])
 	if (script) {
 		fclose(script);
 	}
+	hid_exit();
 	free(buff);
 	return res;
 }
