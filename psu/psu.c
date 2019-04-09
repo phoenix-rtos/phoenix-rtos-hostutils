@@ -166,6 +166,9 @@ static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint8_t fo
 
 int wait_cmd(hid_device **dev)
 {
+	if (*dev != NULL) {
+		hid_close(*dev);
+	}
 	long int vid, pid;
 	char *tok = strtok(NULL, " ");
 	vid = strtol(tok, NULL, 0);
@@ -475,7 +478,7 @@ int main(int argc, char *argv[])
 	int res = 0;
 	size_t len = 1024, lineno = 0;
 	char *buff = malloc(len);
-	hid_device *dev;
+	hid_device *dev = NULL;
 
 	if (argc != 2) {
 		usage(argv[0]);
