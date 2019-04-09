@@ -413,22 +413,22 @@ int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 }
 
 
-int sdp_errStatus(hid_device* dev)
+int sdp_errStatus(hid_device *dev)
 {
-	unsigned char b[BUF_SIZE]={0};
+	unsigned char b[INTERRUPT_SIZE] = { 0 };
 	int rc;
-	b[0]=1;
-	set_status_cmd(b+1);
+	b[0] = 1;
+	set_status_cmd(b + 1);
 
 	if((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send status command (%d)\n", rc);
 		return rc;
 	}
-	if((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
+	if((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 5) {
 		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		return rc;
 	}
-	if((rc = hid_read(dev, b, BUF_SIZE)) < 0) {
+	if((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 0) {
 		fprintf(stderr, "Failed to receive status (n=%d)\n", rc);
 		return rc;
 	}
