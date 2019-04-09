@@ -333,13 +333,13 @@ int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 	}
 
 	//Receive report 3
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
 		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
 		return rc;
 	}
 
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
 		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
 	return rc;
@@ -400,7 +400,7 @@ int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 	}
 
 	/* Receive report 3 */
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
 		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
 		return rc;
