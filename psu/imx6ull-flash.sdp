@@ -21,8 +21,7 @@ JUMP_ADDRESS 0x00907400
 # Load the rest of kernel
 WAIT 0x15a2 0x80
 ERROR_STATUS
-#WRITE_FILE F ../_fs/arm-imx6ull/phoenix-arm-imx6ull.img 0 <ddr_addr>
-WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 16384 0x80000000
+WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 0 0x80000000
 
 # Save args to syspage
 #WRITE_FILE S "Ximx6ull-uart;Xdummyfs;Xpsd /dev/flash0 /dev/flash1" # check if separated with 0
