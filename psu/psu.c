@@ -276,7 +276,7 @@ int write_file_cmd(hid_device *dev)
 	} else {
 		size = buff.size;
 	}
-	res = sdp_writeFile(dev, addr, buff.data, size);
+	res = sdp_writeFile(dev, addr, buff.data + offset, size);
 	close_buffer(*type, &buff);
 
 	return res;
