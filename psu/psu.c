@@ -25,6 +25,7 @@
 #include <getopt.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 
 #include "../common/types.h"
 #include "../common/errors.h"
@@ -164,6 +165,18 @@ static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint8_t fo
 }
 
 
+static inline int8_t char_to_hex(char c)
+{
+	c = tolower(c);
+	if (c >= '0' && c <= '9') {
+		return c - '0';
+	} else if (c >= 'a' && c <= 'f') {
+		return c - 'a' + 10;
+	}
+	return -1;
+}
+
+
 int wait_cmd(hid_device **dev)
 {
 	if (*dev != NULL) {
@@ -217,6 +230,36 @@ int err_status_cmd(hid_device *dev)
 }
 
 
+int parse_byte_string(const char *str, char **out)
+{
+	size_t size = strlen(str);
+	*out = malloc(size * sizeof(*str));
+	char * const out_start = *out;
+	const char * const str_end = str + size;
+	--str;
+	while ((++str) < str_end) {
+		if (*str == '\\') {
+			++str;
+			if (*str == '\\') {
+				*((*out)++) = '\\';
+			} else if (*str == 'x') {
+				*(*out)      = (char_to_hex(*(++str)) & 0xf) << 4;
+				*((*out)++) |= (char_to_hex(*(++str)) & 0xf);
+			} else {
+				fprintf(stderr, "Malformed byte string passed\n");
+				free(out_start);
+				*out = NULL;
+				return -1;
+			}
+		} else {
+			*((*out)++) = *str;
+		}
+	}
+	*out = out_start;
+	return *out - out_start - 1;
+}
+
+
 int get_buffer(char type, char *str, write_file_buff_t *buff)
 {
 	int err = -1;
@@ -229,10 +272,9 @@ int get_buffer(char type, char *str, write_file_buff_t *buff)
 		if (buff->data != NULL)
 			err = 0;
 	} else if (type == 'S') {
-		/* TODO: Parse special cases (hex values, etc) */
-		buff->size = strlen(str);
-		buff->data = str;
-		err = 0;
+		buff->size = parse_byte_string(str, (char **)&buff->data);
+		if (buff->data != NULL)
+			err = 0;
 	}
 	return err;
 }
@@ -244,6 +286,8 @@ int close_buffer(char type, write_file_buff_t *buff)
 	if (type == 'F') {
 		close(buff->fd);
 		err = munmap(buff->data, buff->size);
+	} else if (type == 'S') {
+		free(buff->data);
 	}
 	return err;
 }
