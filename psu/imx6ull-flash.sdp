@@ -8,26 +8,27 @@
 # Example:
 #    WRITE_REGISTER -1 0 8 # special register -1 for psd, switches file to file 0
 # JUMP_ADDRESS <address>
+# ERROR_STATUS
 
 # Wait for device
 WAIT 0x15a2 0x80
 ERROR_STATUS
 
-# load kernel part with DCD initializing DDR
+# Load kernel part with DCD initializing DDR
 WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 0 0x00907000 0x06d8
-#JUMP_ADDRESS <ivt_addr>
+# Jump to ivt_addr
 JUMP_ADDRESS 0x00907400
 
 # Load the rest of kernel
 WAIT 0x15a2 0x80
 ERROR_STATUS
+# Write whole image
 WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 0 0x80000000
-
-# Save args to syspage
-#WRITE_FILE S "Ximx6ull-uart;Xdummyfs;Xpsd /dev/flash0 /dev/flash1" # check if separated with 0
+# Replace syspage fragment
+WRITE_FILE S "\x80\xff\xff\xff\x87\x00\x00\x00\x00\x8c\x51\x04\x00\x00\x00\x00\x00Ximx6ull-uart Xdummyfs Xpsd-old" 0 0x80000023 0x30
 JUMP_ADDRESS 0x800006a8
 
-# wait for psd and write files to flash
+# Wait for psd and write files to flash
 WAIT 0x15a2 0x7d
 WRITE_FILE "../_boot/rootfs.img"
 WRITE_REGISTER -1 1 8 # switch to second flash
