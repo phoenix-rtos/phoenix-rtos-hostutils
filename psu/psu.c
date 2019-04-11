@@ -232,6 +232,7 @@ int err_status_cmd(hid_device *dev)
 
 int parse_byte_string(const char *str, char **out)
 {
+	int res;
 	size_t size = strlen(str);
 	*out = malloc(size * sizeof(*str));
 	char * const out_start = *out;
@@ -255,8 +256,9 @@ int parse_byte_string(const char *str, char **out)
 			*((*out)++) = *str;
 		}
 	}
+	res = *out - out_start;
 	*out = out_start;
-	return *out - out_start - 1;
+	return res;
 }
 
 
