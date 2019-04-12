@@ -25,7 +25,7 @@ ERROR_STATUS
 # Write whole image
 WRITE_FILE F "../_boot/phoenix-arm-imx6ull.img" 0 0x80000000
 # Replace syspage fragment
-WRITE_FILE S "\x80\xff\xff\xff\x87\x00\x00\x00\x00\x8c\x51\x04\x00\x00\x00\x00\x00Ximx6ull-uart Xdummyfs Xpsd-old" 0 0x80000023 0x30
+WRITE_FILE S "\x80\xff\xff\xff\x87\x00\x00\x00\x00\x8c\x51\x04\x00\x00\x00\x00\x00Ximx6ull-uart Xdummyfs Ximx6ull-flash;-p;64;64;-r;jffs2;0;-p;128;64;-p;192;1856;-p;4032;16 Xpsd;/dev/flash0;/dev/flash1" 0 0x80000023
 JUMP_ADDRESS 0x800006a8
 
 # Wait for psd and write files to flash
