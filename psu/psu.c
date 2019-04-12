@@ -539,7 +539,7 @@ int main(int argc, char *argv[])
 	script = fopen(argv[1], "r");
 	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
 		if ((res = execute_line(buff, res, lineno++, &dev)) < 0) {
-			fprintf(stderr, "Syntax error at line %lu\n", lineno);
+			fprintf(stderr, "Error at line %lu\n", lineno - 1);
 			res = -1;
 			break;
 		}
