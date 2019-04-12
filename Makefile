@@ -33,9 +33,9 @@ PREFIX_PROG_STRIPPED := $(PREFIX_BUILD)/prog.stripped/
 
 detected_OS := $(shell uname)
 ifeq ($(detected_OS),Linux)
-	LDFLAGS += -lhidapi-hidraw
+	LDLIBS := -lhidapi-hidraw
 else
-	LDFLAGS += -lhidapi
+	LDLIBS := -lhidapi
 endif
 
 ARCH =  $(SIL)@mkdir -p $(@D); \
