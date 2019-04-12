@@ -316,7 +316,9 @@ int write_file_cmd(hid_device *dev)
 		 size = strtol(tok, NULL, 0);
 	}
 
-	get_buffer(*type, str, &buff);
+	if((res = get_buffer(*type, str, &buff)) < 0)
+		return res;
+
 	if (size) {
 		size = MIN(size, buff.size);
 	} else {
@@ -537,6 +539,7 @@ int main(int argc, char *argv[])
 	script = fopen(argv[1], "r");
 	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
 		if ((res = execute_line(buff, res, lineno++, &dev)) < 0) {
+			fprintf(stderr, "Syntax error at line %lu\n", lineno);
 			res = -1;
 			break;
 		}
