@@ -30,6 +30,6 @@ JUMP_ADDRESS 0x800006a8
 
 # Wait for psd and write files to flash
 WAIT 0x15a2 0x7d
-WRITE_FILE "../_boot/rootfs.img"
+WRITE_FILE F "../_boot/rootfs.img"
 WRITE_REGISTER -1 1 8 # switch to second flash
-WRITE_FILE "../_boot/rootfs.img"
+WRITE_FILE F "../_boot/rootfs.img"
