@@ -264,6 +264,7 @@ int parse_byte_string(const char *str, char **out)
 
 int get_buffer(char type, char *str, write_file_buff_t *buff)
 {
+	fprintf(stderr, " - Sending to the device: %s\n", str);
 	int err = -1;
 	if (type == 'F') {
 		struct stat statbuf;
@@ -345,18 +346,22 @@ int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t d
 	}
 
 	//Receive report 3
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
 		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
 		return rc;
 	}
 
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x128a8a12)
+	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x128a8a12)
 		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
 	return rc;
 }
 
+void print_progress(size_t sent, size_t all)
+{
+	fprintf(stderr, "\r - Sent (%lu/%lu) %5.2f%%     ", sent, all, ((float)sent / (float)all) * 100.0);
+}
 
 int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 {
@@ -378,11 +383,13 @@ int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
 		memcpy(b + 1, data + offset, n);
 		offset += n;
+		print_progress(offset, size);
 		if((rc = hid_write(dev, b, n + 1)) < 0) {
 			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
 			return rc;
 		}
 	}
+	fprintf(stderr, "\n");
 
 	//Receive report 3
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
@@ -393,6 +400,8 @@ int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 
 	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
 		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+
+	fprintf(stderr, " - File has been written correctly.\n");
 
 	return rc;
 }
@@ -525,6 +534,7 @@ int main(int argc, char *argv[])
 {
 	FILE *script;
 	int res = 0;
+	int err = 0;
 	size_t len = 1024, lineno = 0;
 	char *buff = malloc(len);
 	hid_device *dev = NULL;
@@ -538,19 +548,25 @@ int main(int argc, char *argv[])
 	/* Interpret script */
 	script = fopen(argv[1], "r");
 	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
-		if ((res = execute_line(buff, res, lineno++, &dev)) < 0) {
+		if ((err = execute_line(buff, res, lineno++, &dev)) < 0) {
 			fprintf(stderr, "Error at line %lu\n", lineno - 1);
-			res = -1;
 			break;
 		}
 	}
 
-	hid_close(dev);
-	if (script) {
+	fprintf(stderr,"\n------------------\n");
+	if (err)
+		fprintf(stderr, "%d error(s) occured. Device may not boot correctly after restart.\n", err);
+	else
+		fprintf(stderr, "All done. Restart the device to boot from internal storage.\n");
+
+	if (script)
 		fclose(script);
-	}
+
+	hid_close(dev);
 	hid_exit();
 	free(buff);
+
 	return res;
 }
 
