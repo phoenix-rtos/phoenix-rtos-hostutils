@@ -6,7 +6,7 @@
  * Copyright 2001, 2004 Pawel Pisarczyk
  * Copyright 2012 Phoenix Systems
  *
- * Author: Pawel Pisarczyk, Jacek Popko
+ * Author: Pawel Pisarczyk, Jacek Popko, Hubert Buczyński
  *
  * This file is part of Phoenix-RTOS.
  *

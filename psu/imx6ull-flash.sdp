@@ -1,15 +1,3 @@
-# Syntax
-# WAIT <vid> <pid>
-# WRITE_FILE <F/S> <quoted string> [offset] [address] [size]
-# Example:
-#    WRITE_FILE F "phoenix-arm-imx6ull.img" 0 0xac000000 16384   # off=0 addr=0xac000000 size=16384
-#    WRITE_FILE F "phoenix-arm-imx6ull.img" 16384 0xac000000     # off=16384 addr=0xac000000 size=<whole file>
-# WRITE_REGISTER <address> <value> <format 8/16/32>
-# Example:
-#    WRITE_REGISTER -1 0 8 # special register -1 for psd, switches file to file 0
-# JUMP_ADDRESS <address>
-# ERROR_STATUS
-
 # Wait for device
 WAIT 0x15a2 0x80
 ERROR_STATUS
