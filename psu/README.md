@@ -32,8 +32,10 @@ SDP script syntax:
 |CHANGE_PARTITION|-1|file number|
 |ERASE_ROOTFS_ADDRESS |-2 |rootfs size|
 |ERASE_ALL_ADDRESS |-3|rootfs size|
-|CONTROL_BLOCK_ADDRESS|-4|1 - FCB; 2 - DBBT|
-|CLOSE_PSD|-10|0|
+|CHECK_PRODUCTION |-4|none|
+|CONTROL_BLOCK_ADDRESS|-5|1 - FCB; 2 - DBBT|
+|BLOW_FUSES|-6|none|
+|CLOSE_PSD|-100|0|
   
   Example:	
   ```

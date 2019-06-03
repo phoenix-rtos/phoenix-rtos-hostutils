@@ -337,6 +337,7 @@ int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t d
 	int rc;
 	unsigned char b[BUF_SIZE]={0};
 
+	fprintf(stderr, " - Writing to the address: %d\n", (int)addr);
 	/* Send write command */
 	b[0] = 1;
 	set_write_reg_cmd(b + 1, addr, format, data);
