@@ -67,14 +67,14 @@ $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 	@(printf "STR %-24s\n" "$(@F)")
 	$(SIL)$(STRIP) -o $@ $<
 
-.PHONY: clean
-clean:
-	@echo "rm -rf $(BUILD_DIR)"
-
 include phoenixd/Makefile
 include psu/Makefile
 
 all: $(PREFIX_PROG_STRIPPED)phoenixd $(PREFIX_PROG_STRIPPED)psu
+
+.PHONY: clean
+clean:
+	@echo "rm -rf $(BUILD_DIR)"
 
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
 	$(shell rm -rf $(BUILD_DIR))
