@@ -161,6 +161,7 @@ static inline void set_write_reg_cmd(unsigned char* b, uint32_t addr, uint8_t fo
 	SET_CMD_TYPE(b,0x02);
 	SET_ADDR(b,addr);
 	SET_FORMAT(b,format);
+	SET_COUNT(b, format / 8);
 	SET_DATA(b, data);
 }
 
@@ -337,7 +338,7 @@ int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t d
 	int rc;
 	unsigned char b[BUF_SIZE]={0};
 
-	fprintf(stderr, " - Writing to the address: %d\n", (int)addr);
+	fprintf(stderr, " - Writing value: %#x, to the address: %#x\n", (int)data, (int)addr);
 	/* Send write command */
 	b[0] = 1;
 	set_write_reg_cmd(b + 1, addr, format, data);
@@ -453,6 +454,7 @@ int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 	int rc;
 	unsigned char b[BUF_SIZE]={0};
 
+	fprintf(stderr, " - To the address: %#x\n", (int)addr);
 	/* Send write command */
 	b[0] = 1;
 	set_jmp_cmd(b + 1, addr);

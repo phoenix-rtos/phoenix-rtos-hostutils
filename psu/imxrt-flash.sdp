@@ -1,0 +1,12 @@
+# Wait for device
+WAIT 0x1fc9 0x0135
+ERROR_STATUS
+
+WRITE_REGISTER 0x400ac040 0x200007 32
+WRITE_REGISTER 0x400ac044 0xaaaaffff 32
+
+WRITE_FILE F "imxrt_image.bin" 0x100 0x100
+
+# Jump to ivt_addr
+JUMP_ADDRESS 0x1000
+
