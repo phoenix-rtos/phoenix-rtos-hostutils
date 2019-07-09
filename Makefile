@@ -11,7 +11,8 @@ SIL ?= @
 MAKEFLAGS += --no-print-directory
 
 CC = gcc
-CFLAGS = -c -Wall -I . -O2 -g
+CFLAGS = -c -Wall -I . -O2 -g -I /usr/local/include
+LDFLAGS =
 LD = gcc
 TARGET := host
 STRIP = strip
@@ -35,7 +36,7 @@ detected_OS := $(shell uname)
 ifeq ($(detected_OS),Linux)
 	LDLIBS := -lhidapi-hidraw
 else
-	LDLIBS := -lhidapi
+	LDLIBS := `pkg-config --libs hidapi`
 endif
 
 ARCH =  $(SIL)@mkdir -p $(@D); \
