@@ -15,7 +15,7 @@ ERROR_STATUS
 WRITE_FILE F "phoenix-arm-imx6ull.img" 0 0x80000000
 
 # Syspage elements in little endian: begin, end, kernel, kernel_size, console.
-WRITE_FILE S "\x00\x00\x00\x80\xff\xff\xff\x87\x00\x00\x00\x00\x00\x80\x3a\x49\x00\x00\x00\x00Ximx6ull-uart Xdummyfs Ximx6ull-flash;-p;0;4;-p;4;4;-p;8;16;-p;24;40;-p;64;64;-p;128;64;-p;192;1856;-p;4032;16 Xpsd;/dev/flash0;/dev/flash1;/dev/flash2;/dev/flash3;/dev/flash4;/dev/flash5" 0 0x80000020
+WRITE_FILE S "\x00\x00\x00\x80\xff\xff\xff\x87\x00\x00\x00\x00\x00\x80\x3a\x49\x00\x00\x00\x00Ximx6ull-uart Xdummyfs Ximx6ull-flash;-p;0;4;-p;4;4;-p;8;16;-p;24;40;-p;64;128;-p;192;128;-p;2048;1952;-p;4032;16 Xpsd;/dev/flash0;/dev/flash1;/dev/flash2;/dev/flash3;/dev/flash4;/dev/flash5" 0 0x80000020
 
 # Run kernel
 JUMP_ADDRESS 0x80000708
@@ -24,7 +24,7 @@ JUMP_ADDRESS 0x80000708
 WAIT 0x15a2 0x7d
 
 # Erase all data
-WRITE_REGISTER -3 64 8
+#WRITE_REGISTER -3 128 8
 
 # Flash Firmware COnfiguration Block (FCB)
 WRITE_REGISTER -5 1 8
