@@ -43,7 +43,7 @@ int silent = 0;
 	} while(0)
 
 
-static inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t size)
+static inline void set_write_file_cmd(unsigned char *b, uint32_t addr, uint32_t size)
 {
 	SET_CMD_TYPE(b,0x04);
 	SET_ADDR(b,addr);
@@ -52,7 +52,7 @@ static inline void set_write_file_cmd(unsigned char* b,uint32_t addr,uint32_t si
 }
 
 
-static inline void set_jmp_cmd(unsigned char* b,uint32_t addr)
+static inline void set_jmp_cmd(unsigned char *b, uint32_t addr)
 {
 	SET_CMD_TYPE(b,0x0b);
 	SET_ADDR(b,addr);
@@ -60,13 +60,13 @@ static inline void set_jmp_cmd(unsigned char* b,uint32_t addr)
 }
 
 
-static inline void set_status_cmd(unsigned char* b)
+static inline void set_status_cmd(unsigned char *b)
 {
 	SET_CMD_TYPE(b,0x05);
 }
 
 
-static inline void set_write_reg_cmd(unsigned char* b,uint32_t addr,uint32_t v)
+static inline void set_write_reg_cmd(unsigned char *b, uint32_t addr, uint32_t v)
 {
 	SET_CMD_TYPE(b,0x02);
 	SET_ADDR(b,addr);
@@ -114,66 +114,68 @@ static int open_vybrid(hid_device** h)
 #define CMD_SIZE 17
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
-int load_file(hid_device* h, char* filename, uint32_t addr)
+int load_file(hid_device *h, char *filename, uint32_t addr)
 {
-	int fd=-1,n,rc;
+	int fd = -1, n, rc;
 	struct stat f_st;
-	unsigned char b[BUF_SIZE]={0};
+	unsigned char b[BUF_SIZE] = {0};
 
-	if (0>(fd=open(filename,O_RDONLY))) {
-		fprintf(stderr,"Failed to open file (%s)\n",strerror(errno));
+	if ((fd = open(filename,O_RDONLY)) < 0) {
+		fprintf(stderr,"Failed to open file (%s)\n", strerror(errno));
 		return -1;
 	}
 
-	if(fstat(fd,&f_st) != 0) {
-		fprintf(stderr,"File stat failed (%s)\n",strerror(errno));
+	if(fstat(fd, &f_st) != 0) {
+		fprintf(stderr,"File stat failed (%s)\n", strerror(errno));
 		close(fd);
 		return -1;
 	}
 
-	b[0]=1;
-	set_write_file_cmd(b+1,addr,f_st.st_size);
+	b[0] = 1;
+	set_write_file_cmd(b + 1, addr, f_st.st_size);
 	//print_cmd(b+1);
 	if ((rc = hid_write(h, b, CMD_SIZE)) < 0){
 		fprintf(stderr, "Failed to send write_file command\n");
 		goto END;
 	}
 
-	b[0]=2;
-	while((n = read(fd,b+1,BUF_SIZE-1)) > 0)
+	b[0] = 2;
+	while((n = read(fd, b + 1, BUF_SIZE - 1)) > 0)
 		if((rc = hid_write(h, b, n + 1)) < 0) {
 			fprintf(stderr, "Failed to send file contents\n");
 			goto END;
 		}
 
 	if(n < 0) {
-		fprintf(stderr,"Error reading file (%d,%s)\n",n,strerror(errno));
+		fprintf(stderr, "Error reading file (%d,%s)\n", n, strerror(errno));
 		rc = -1;
 		goto END;
 	}
 
 	//Receive report 3
 	if((rc = hid_read(h, b, BUF_SIZE)) != 5) {
-		fprintf(stderr,"Failed to receive HAB mode (n=%d)\n",rc);
+		fprintf(stderr,"Failed to receive HAB mode (n=%d)\n", rc);
 		rc = -1;
 		goto END;
 	}
 	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if(((rc = hid_read(h,b,BUF_SIZE)) < 0) || *(uint32_t*)(b + 1) != 0x88888888) {
-		fprintf(stderr,"Failed to receive complete status (status=%02x%02x%02x%02x)\n",b[1],b[2],b[3],b[4]);
+	if(((rc = hid_read(h, b, BUF_SIZE)) < 0) || *(uint32_t *)(b + 1) != 0x88888888) {
+		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 		goto END;
 	}
 
 END:
-	if(fd>-1) close(fd);
+	if(fd > -1)
+		close(fd);
 	return rc;
 }
 
-int load_image(hid_device *h, void *image, ssize_t size, uint32_t  addr)
+
+int load_image(hid_device *h, void *image, ssize_t size, uint32_t addr)
 {
-	int n,rc;
+	int n, rc;
 	ssize_t offset = 0;
-	unsigned char b[BUF_SIZE]={0};
+	unsigned char b[BUF_SIZE] = {0};
 
 	b[0] = 1;
 	set_write_file_cmd(b + 1, addr, size);
@@ -201,20 +203,21 @@ int load_image(hid_device *h, void *image, ssize_t size, uint32_t  addr)
 		goto END;
 	}
 	//printf("HAB mode: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if ((rc = hid_read(h, b, BUF_SIZE) < 0) || *(uint32_t*)(b + 1) != 0x88888888)
+	if ((rc = hid_read(h, b, BUF_SIZE) < 0) || *(uint32_t *)(b + 1) != 0x88888888)
 		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
 
 END:
 	return rc;
 }
 
-int jmp_2_addr(hid_device* h,uint32_t addr)
-{
-	int rc=0;
-	unsigned char b[INTERRUPT_SIZE]={0};
 
-	b[0]=1;
-	set_jmp_cmd(b+1,addr);
+int jmp_2_addr(hid_device *h, uint32_t addr)
+{
+	int rc = 0;
+	unsigned char b[INTERRUPT_SIZE] = {0};
+
+	b[0] = 1;
+	set_jmp_cmd(b + 1, addr);
 	//print_cmd(b+1);
 	if((rc = hid_write(h, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send jmp command");
@@ -225,7 +228,7 @@ int jmp_2_addr(hid_device* h,uint32_t addr)
 		goto END;
 	}
 	//printf("HAB: %02x%02x%02x%02x\n",b[1],b[2],b[3],b[4]);
-	if((rc = hid_read(h,b,INTERRUPT_SIZE)) >= 0) {
+	if((rc = hid_read(h, b, INTERRUPT_SIZE)) >= 0) {
 		fprintf(stderr, "Received HAB error status (n=%d): %02x%02x%02x%02x\nJump address command failed\n", rc, b[1], b[2], b[3], b[4]);
 		goto END;
 	} else
@@ -235,13 +238,14 @@ END:
 	return rc;
 }
 
-int write_reg(hid_device* h, uint32_t addr, uint32_t v)
+
+int write_reg(hid_device *h, uint32_t addr, uint32_t v)
 {
 	int rc;
-	unsigned char b[INTERRUPT_SIZE]={0};
+	unsigned char b[INTERRUPT_SIZE] = {0};
 
-	b[0]=1;
-	set_write_reg_cmd(b+1,addr,v);
+	b[0] = 1;
+	set_write_reg_cmd(b + 1, addr, v);
 	//print_cmd(b+1);
 	rc = hid_write(h, b, CMD_SIZE);
 	if(rc < 0)
@@ -259,12 +263,14 @@ int write_reg(hid_device* h, uint32_t addr, uint32_t v)
 	return rc;
 }
 
-int do_status(hid_device* h)
+
+int do_status(hid_device *h)
 {
-	unsigned char b[INTERRUPT_SIZE]={0};
+	unsigned char b[INTERRUPT_SIZE] = {0};
 	int rc;
-	b[0]=1;
-	set_status_cmd(b+1);
+
+	b[0] = 1;
+	set_status_cmd(b + 1);
 	//print_cmd(b+1);
 	if (silent)
 		fprintf(stderr, "\n");
@@ -288,7 +294,7 @@ END:
 }
 
 
-int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *image, ssize_t size)
+int usb_vybrid_dispatch(char *kernel, char *loadAddr, char *jumpAddr, void *image, ssize_t size)
 {
 	int rc;
 	int err = 0;
@@ -312,7 +318,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		}
 
 		if((rc = do_status(h)) != 0) {
-			fprintf(stderr,"Device failure (check if device is in serial download mode, check USB connection)\n");
+			fprintf(stderr, "Device failure (check if device is in serial download mode, check USB connection)\n");
 			return -1;
 		}
 
@@ -323,8 +329,8 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 			if (load_addr == 0)
 				load_addr = 0x3f000000;
 
-			if((rc = load_file(h,kernel,load_addr)) != 0) {
-				fprintf(stderr,"Failed to load file to device\n");
+			if((rc = load_file(h, kernel, load_addr)) != 0) {
+				fprintf(stderr, "Failed to load file to device\n");
 				continue;
 			}
 		} else {
@@ -333,7 +339,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 			if (load_addr == 0)
 				load_addr = 0x3f000000;
 			if ((rc = load_image(h, image, size, load_addr)) != 0) {
-				fprintf(stderr,"Failed to load image to device\n");
+				fprintf(stderr, "Failed to load image to device\n");
 				continue;
 			}
 		}
@@ -350,7 +356,7 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 		if(jump_addr == 0)
 			jump_addr = 0x3f000400;
 		if((rc = jmp_2_addr(h,jump_addr)) != 0) {
-			fprintf(stderr,"Failed to send jump command to device (%d)\n",rc);
+			fprintf(stderr, "Failed to send jump command to device (%d)\n",rc);
 			continue;
 		}
 		dispatch_msg(silent, "Code execution started.\n");
@@ -359,8 +365,8 @@ int usb_vybrid_dispatch(char* kernel, char* loadAddr, char* jumpAddr, void *imag
 	}
 
 	dispatch_msg(silent, "Closing usb loader\n");
-	if(h) hid_close(h);
+	if (h)
+		hid_close(h);
 	hid_exit();
 	return rc;
 }
-

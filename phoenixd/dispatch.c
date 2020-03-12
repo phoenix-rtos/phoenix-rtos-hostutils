@@ -31,28 +31,30 @@
 int (*msg_send)(int fd, msg_t *msg, u16 seq);
 int (*msg_recv)(int fd, msg_t *msg, int *state);
 
+
 static char *concat(char *s1, char *s2)
 {
 	char *result = malloc(strlen(s1) + strlen(s2) + 1);
 	strcpy(result, s1);
 	strcat(result, s2);
 	return result;
-
 }
+
 
 static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, int *fd_out)
 {
-		if ((*fd_in = open(dev_in, O_RDONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);
-			return ERR_DISPATCH_IO;
-		}
+	if ((*fd_in = open(dev_in, O_RDONLY)) < 0) {
+		fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_in);
+		return ERR_DISPATCH_IO;
+	}
 
-		if ((*fd_out = open(dev_out, O_WRONLY)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);
-			return ERR_DISPATCH_IO;
-		}
+	if ((*fd_out = open(dev_out, O_WRONLY)) < 0) {
+		fprintf(stderr, "[%d] dispatch: Can't open pipe '%s'\n", getpid(), dev_out);
+		return ERR_DISPATCH_IO;
+	}
 	return 0;
 }
+
 
 /* Function reads and dispatches messages */
 int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir)
