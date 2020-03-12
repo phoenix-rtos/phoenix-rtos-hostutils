@@ -82,16 +82,53 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 }
 
 
+void print_help(void)
+{
+	fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir]\n"
+			"\t\t-p serial_device [ [-p serial_device] ... ]\n"
+			"\t\t-m pipe_file [ [-m pipe_file] ... ]\n"
+			"\t\t-i ip_addr:port [ [-i ip_addr:port] ... ]\n"
+			"\t\t-u load_addr[:jump_addr]\n");
+
+	fprintf(stderr, "\n"
+		"For imx6ull:\n"
+		"\n"
+		"Modes:\n"
+		"--sdp\t\t- Make image for older kernels version without plugin. Image\n"
+		"\t\t  will contain only kernel + initrd and it is limited to 68KB.\n"
+		"\t\t  It is expected initrd will download the rest of the modules\n"
+		"\t\t  (console + append).\n"
+		"--plugin\t- Make image with all modules in syspage for kernels with\n"
+		"\t\t  plugin. Image size is limited to 4MB. In this mode arguments\n"
+		"\t\t  are passed only to kernel e.g.\n"
+		"\t\t  <kernel_path>=\"app1;arg1;arg2 app2;arg1;arg2\".\n"
+		"--upload\t- Just like the sdp mode but for kernels with plugin. Image\n"
+		"\t\t  size is limited to 4MB.\n"
+		"\n"
+		"Arguments:\n"
+		"-k, --kernel\t- kernel image path\n"
+		"-c, --console\t- console server path\n"
+		"-I, --initrd\t- initrd server path\n"
+		"-x, --execute\t- path to servers appended to initrd with optional arguments\n"
+		"\t\t  (they will be automatically executed),\n"
+		"-a, --append\t- path to servers appended to initrd with optional arguments,\n"
+		"\t\t  prefix path with F to fetch or X to fetch and execute (only\n"
+		"\t\t  in sdp and upload modes) example:\n"
+		"\t\t  --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n"
+		"-o, --output\t- output file path. By default image is uploaded.\n"
+		"-h, --help\t- prints this message\n");
+}
+
+
 int main(int argc, char *argv[])
 {
 	int c;
 	int ind;
-	int len, len2;
+	int len = 0, len2;
 	char bspfl = 0;
 	char *kernel = "../kernel/phoenix";
 
 	int sdp = 0;
-	int help = 0;
 	int opt_idx = 0;
 	char *initrd = NULL;
 	char *console = NULL;
@@ -113,14 +150,17 @@ int main(int argc, char *argv[])
 		{"initrd", required_argument, 0, 'I'},
 		{"append", required_argument, 0, 'a'},
 		{"execute", required_argument, 0, 'x'},
-		{"help", no_argument, &help, 1},
+		{"help", no_argument, 0, 'h'},
 		{"output", required_argument, 0, 'o'},
 		{0, 0, 0, 0}};
 
-	printf("-\\- Phoenix server, ver. " VERSION "\n(c) 2000, 2005 Pawel Pisarczyk\n(c) 2012 Phoenix Systems\n");
+	printf("-\\- Phoenix server, ver. " VERSION "\n"
+		"(c) 2000, 2005 Pawel Pisarczyk\n"
+		"(c) 2012 Phoenix Systems\n"
+		"\n");
 
 	while (1) {
-		c = getopt_long(argc, argv, "k:p:s:1m:i:u:a:x:c:I:", long_opts, &opt_idx);
+		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
@@ -157,13 +197,16 @@ int main(int argc, char *argv[])
 			ttys[i++] = optarg;
 			break;
 		case 'u':
+			if (i >= 8) {
+				fprintf(stderr, "Too many instances (-u %s)\n", optarg);
+				break;
+			}
 			mode[i] = USB_VYBRID;
 			ttys[i++] = optarg; /* Load address */
 			break;
 		case 'a':
 		case 'x':
 			ind = optind - 1;
-			len = (append != NULL) ? strlen(append) : 0;
 			len2 = 0;
 			while (ind < argc && *argv[ind] != '-') {
 				len2 += strlen(argv[ind]) + 1 + (c == 'x');
@@ -172,13 +215,9 @@ int main(int argc, char *argv[])
 			append = realloc(append, len + len2 + 1);
 			ind = optind - 1;
 			while (ind < argc && *argv[ind] != '-') {
-				if (c == 'x')
-					len += sprintf(append + len, "X%s ", argv[ind]);
-				else
-					len += sprintf(append + len, "%s ", argv[ind]);
+				len += sprintf(append + len, c == 'x' ? "X%s " : "%s " , argv[ind]);
 				ind++;
 			}
-			append[len] = '\0';
 			break;
 		case 'I':
 			initrd = optarg;
@@ -189,63 +228,46 @@ int main(int argc, char *argv[])
 		case 'o':
 			output = optarg;
 			break;
+		case 'h':
+		case '?':
+			print_help();
+			return -1;
 		default:
 			break;
 		}
 	}
 
 	if (output) {
-		if (!kernel) {
-			printf("Output file needs kernel and initrd paths\n");
-			return 0;
+		if (kernel == NULL || initrd == NULL) {
+			fprintf(stderr, "Output file needs kernel and initrd paths\n");
+			return -1;
 		}
 		res = boot_image(kernel, initrd, console, append, output, sdp == 2 ? 1 : 0);
-		return 0;
+		return res;
 	}
 
 	if (sdp) {
+		res = 0;
 		if (sdp == 1)
 			res = usb_imx_dispatch(kernel, console, initrd, append, 0);
 		else if (sdp == 2)
 			res = boot_image(kernel, initrd, console, append, NULL, 1);
 		else if (sdp == 3)
 			res = usb_imx_dispatch(kernel, console, initrd, append, 1);
-		free(append);
-		return 0;
+		return res;
 	}
 
-	if ((!i && !sdp) || help) {
-		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n");
-		fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir] "
-				"-p serial_device [ [-p serial_device] ... ] -m pipe_file [ [-m pipe_file] ... ]"
-				"-i ip_addr:port [ [-i ip_addr:port] ... ]"
-				" -u [load_addr[:jump_addr]]\n");
-
-		printf("\nFor imx6ull:\n\n"
-				"Modes:\n"
-				"--sdp\t\t- Make image for older kernels version without plugin.\n"
-				"\t\t  Image will contain only kernel + initrd and it is limited to 68KB.\n"
-				"\t\t  It is expected initrd will download the rest of the modules (console + append).\n"
-				"--plugin\t- Make image with all modules in syspage for kernels with plugin. Image size is limited to 4MB.\n"
-				"\t\t  In this mode arguments are passed only to kernel e.g. <kernel_path>=\"app1;arg1;arg2 app2;arg1;arg2\".\n"
-				"--upload\t- Just like the sdp mode but for kernels with plugin. Image size is limited to 4MB.\n"
-				"\nArguments:\n"
-				"--kernel, -k\t- kernel image path\n"
-				"--console, -c\t- console server path\n"
-				"--initrd, -I\t- initrd server path\n"
-				"--execute, -x\t- path to servers appended to initrd with optional arguments (they will be automatically executed),\n"
-				"--append, -a\t- path to servers appended to initrd with optional arguments,\n"
-				"\t\t  prefix path with F to fetch or X to fetch and execute (only in sdp and upload modes)\n"
-				"\t\t  example: --append Xpath1=arg1,arg2 Fpath2=arg1,arg2\n"
-				"--output, -o\t- output file path. By default image is uploaded.\n"
-				"--help, -h\t- prints this message\n");
+	if (i == 0) {
+		fprintf(stderr, "You have to specify at least one serial device, pipe or IP address\n\n");
+		print_help();
 		return -1;
 	}
 
+	free(append);
 	for (k = 0; k < i; k++) {
 		res = fork();
 		if(res < 0) {
-			fprintf(stderr,"Fork error for %d child!\n",k);
+			fprintf(stderr, "Fork error for %d child!\n", k);
 			continue;
 		} else if(res == 0) {
 			if (bspfl)
@@ -259,7 +281,7 @@ int main(int argc, char *argv[])
 			} else {
 				unsigned speed_port = 0;
 
-				if (mode[k] == UDP)	{
+				if (mode[k] == UDP) {
 					char *port;
 
 					if ((port = strchr(ttys[k], ':')) != NULL)
