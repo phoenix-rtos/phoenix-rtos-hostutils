@@ -11,7 +11,7 @@ SIL ?= @
 MAKEFLAGS += --no-print-directory
 
 CC = gcc
-CFLAGS = -c -Wall -I . -O2 -g -I /usr/local/include
+CFLAGS = -c -Wall -I . -O2 -g -I /opt/local/include -I/usr/local/include
 LDFLAGS =
 LD = gcc
 TARGET := host
@@ -55,13 +55,13 @@ $(PREFIX_O)%.o: %.c
 	@mkdir -p $(@D)
 	$(SIL)(printf "CC  %-24s\n" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
-	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
+	$(SIL)$(CC) -M  -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
 
 $(PREFIX_O)%.o: %.S
 	@mkdir -p $(@D)
 	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
-	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
+	$(SIL)$(CC) -M  -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
 
 $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 	@mkdir -p $(@D)
