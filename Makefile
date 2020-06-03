@@ -70,8 +70,9 @@ $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 
 include phoenixd/Makefile
 include psu/Makefile
+include psdisk/Makefile
 
-all: $(PREFIX_PROG_STRIPPED)phoenixd $(PREFIX_PROG_STRIPPED)psu
+all: $(PREFIX_PROG_STRIPPED)phoenixd $(PREFIX_PROG_STRIPPED)psu $(PREFIX_PROG_STRIPPED)psdisk
 
 .PHONY: clean
 clean:
