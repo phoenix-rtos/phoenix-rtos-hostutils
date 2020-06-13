@@ -32,8 +32,8 @@
 
 extern char *optarg;
 
+#define VERSION "1.5"
 
-#define VERSION "1.3"
 
 int phoenixd_session(char *tty, char *kernel, char *sysdir)
 {
@@ -155,8 +155,8 @@ int main(int argc, char *argv[])
 		{0, 0, 0, 0}};
 
 	printf("-\\- Phoenix server, ver. " VERSION "\n"
-		"(c) 2000, 2005 Pawel Pisarczyk\n"
 		"(c) 2012 Phoenix Systems\n"
+		"(c) 2000, 2005 Pawel Pisarczyk\n"
 		"\n");
 
 	while (1) {
@@ -293,8 +293,11 @@ int main(int argc, char *argv[])
 					if (speed_port == 0 || speed_port > 0xffff)
 						speed_port = PHFS_DEFPORT;
 				}
-				else
+				else {
 					speed_port = B460800;
+					if (speed_port == B115200)
+						speed_port = 460800;
+				}
 
 				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
