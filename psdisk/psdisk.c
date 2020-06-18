@@ -570,7 +570,8 @@ static int psdisk_openImg(char *argv[])
 	}
 
 	/* Check whether file exists. */
-	psdisk_common.opts |= (((access(psdisk_common.fileName, F_OK) == 0) && errno == 0) ? 1 : 0) << attr_fileExists;
+	if (access(psdisk_common.fileName, F_OK) == 0)
+		psdisk_common.opts |= 1 << attr_fileExists;
 
 	if (FILE_EXIST(psdisk_common.opts))
 		param = "r+b";
