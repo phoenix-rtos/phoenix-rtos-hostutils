@@ -1,12 +1,12 @@
 /*
  * Phoenix-RTOS
  *
- * Phoenix server
+ * psu - sdp script loader
  *
  * Copyright 2001, 2004 Pawel Pisarczyk
- * Copyright 2012, 2018, 2019 Phoenix Systems
+ * Copyright 2012, 2018-2020 Phoenix Systems
  *
- * Author: Pawel Pisarczyk, Jacek Popko, Hubert Buczyński, Aleksander Kaminski
+ * Author: Pawel Pisarczyk, Jacek Popko, Hubert Buczynski, Aleksander Kaminski, Gerard Swiderski
  *
  * This file is part of Phoenix-RTOS.
  *
@@ -16,25 +16,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <stdlib.h>
-#include <getopt.h>
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <ctype.h>
 
-#include "../common/types.h"
-#include "../common/errors.h"
-#include "../common/serial.h"
-#include "../phoenixd/bsp.h"
-#include "../phoenixd/msg_udp.h"
-#include "../phoenixd/dispatch.h"
-
 #include "../common/hid.h"
+#include "../common/script.h"
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
@@ -49,77 +43,12 @@
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
 
-enum { SDP };
 
-
-typedef struct {
-	int fd;
-	unsigned int size;
-	void *data;
-} write_file_buff_t;
-
-
-extern char *optarg;
-
-static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t data);
-static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size);
-static int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size);
-static int sdp_jmpAddr(hid_device *dev, uint32_t addr);
-static int sdp_errStatus(hid_device *dev);
-
-#define VERSION "1.3"
-
-
-void usage(char *progname)
+int usage(char *progname)
 {
 	printf("Usage: %s script_path\n", progname);
-}
 
-
-int phoenixd_session(char *tty, char *kernel, char *sysdir)
-{
-	uint8_t t;
-	int fd, count, err;
-	uint8_t buff[BSP_MSGSZ];
-
-	fprintf(stderr, "[%d] Starting phoenixd-child on %s\n", getpid(), tty);
-
-	if ((fd = serial_open(tty, B460800)) < 0) {
-		fprintf(stderr, "[%d] Can't open %s [%d]!\n", getpid(), tty, fd);
-		return ERR_PHOENIXD_TTY;
-	}
-
-	for (;;) {
-		if ((count = bsp_recv(fd, &t, (char*)buff, BSP_MSGSZ, 0)) < 0) {
-			bsp_send(fd, BSP_TYPE_RETR, NULL, 0);
-			continue;
-		}
-
-		switch (t) {
-
-		/* Handle kernel request */
-		case BSP_TYPE_KDATA:
-			if (*(u8 *)buff != 0) {
-				fprintf(stderr, "[%d] Bad kernel request on %s\n", getpid(), tty);
-				break;
-			}
-			fprintf(stderr, "[%d] Sending kernel to %s\n", getpid(), tty);
-
-			if ((err = bsp_sendkernel(fd, kernel)) < 0) {
-				fprintf(stderr, "[%d] Sending kernel error [%d]!\n", getpid(), err);
-				break;
-			}
-			break;
-
-		/* Handle program request */
-		case BSP_TYPE_PDATA:
-			fprintf(stderr, "[%d] Load program request on %s, program=%s\n", getpid(), tty, &buff[2]);
-			if ((err = bsp_sendprogram(fd, (char*)&buff[2], sysdir)) < 0)
-				fprintf(stderr, "[%d] Sending program error [%d]!\n", getpid(), err);
-			break;
-		}
-	}
-	return 0;
+	return -1;
 }
 
 
@@ -164,193 +93,7 @@ static inline void set_write_reg_cmd(unsigned char *b, uint32_t addr, uint8_t fo
 }
 
 
-static inline int8_t char_to_hex(char c)
-{
-	if (c >= '0' && c <= '9')
-		return c - '0';
-	else if (c >= 'a' && c <= 'f')
-		return c - 'a' + 10;
-	else if (c >= 'A' && c <= 'F')
-		return c - 'A' + 10;
-
-	return -1;
-}
-
-
-int wait_cmd(hid_device **dev)
-{
-	long int vid, pid;
-	char *tok;
-	int retries = 0;
-
-	if (*dev != NULL)
-		hid_close(*dev);
-
-	tok = strtok(NULL, " ");
-	vid = strtol(tok, NULL, 0);
-	tok = strtok(NULL, " ");
-	pid = strtol(tok, NULL, 0);
-
-	sleep(1);
-
-	while ((*dev = open_device(vid, pid)) == NULL) {
-		if (retries++ > 10)
-			return -1;
-
-		sleep(1);
-	}
-
-	return 0;
-}
-
-
-int write_reg_cmd(hid_device *dev)
-{
-	long int addr, data, format;
-	char *tok = strtok(NULL, " ");
-	addr = strtol(tok, NULL, 0);
-	tok = strtok(NULL, " ");
-	data = strtol(tok, NULL, 0);
-	tok = strtok(NULL, " ");
-	format = strtol(tok, NULL, 0);
-
-	return sdp_writeRegister(dev, addr, format, data);
-}
-
-
-int jump_addr_cmd(hid_device *dev)
-{
-	long int addr;
-	char *tok = strtok(NULL, " ");
-	addr = strtol(tok, NULL, 0);
-
-	return sdp_jmpAddr(dev, addr);
-}
-
-
-int err_status_cmd(hid_device *dev)
-{
-	return sdp_errStatus(dev);
-}
-
-
-int parse_byte_string(const char *str, char **out)
-{
-	int res;
-	size_t size = strlen(str);
-	*out = malloc(size * sizeof(*str));
-	char * const out_start = *out;
-	const char * const str_end = str + size;
-	--str;
-
-	while ((++str) < str_end) {
-		if (*str == '\\') {
-			++str;
-			if (*str == '\\') {
-				*((*out)++) = '\\';
-			}
-			else if (*str == 'x') {
-				*(*out)      = (char_to_hex(*(++str)) & 0xf) << 4;
-				*((*out)++) |= (char_to_hex(*(++str)) & 0xf);
-			}
-			else {
-				fprintf(stderr, "Malformed byte string passed\n");
-				free(out_start);
-				*out = NULL;
-				return -1;
-			}
-		}
-		else {
-			*((*out)++) = *str;
-		}
-	}
-
-	res = *out - out_start;
-	*out = out_start;
-	return res;
-}
-
-
-int get_buffer(char type, char *str, write_file_buff_t *buff)
-{
-	int err = -1;
-	struct stat statbuf;
-
-	fprintf(stderr, " - Sending to the device: %s\n", str);
-
-	if (type == 'F') {
-		buff->fd = open(str, O_RDONLY);
-		fstat(buff->fd, &statbuf);
-		buff->size = statbuf.st_size;
-		buff->data = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, buff->fd, 0);
-		if (buff->data != NULL)
-			err = 0;
-	}
-	else if (type == 'S') {
-		buff->size = parse_byte_string(str, (char **)&buff->data);
-		if (buff->data != NULL)
-			err = 0;
-	}
-
-	return err;
-}
-
-
-int close_buffer(char type, write_file_buff_t *buff)
-{
-	int err = -1;
-
-	if (type == 'F') {
-		close(buff->fd);
-		err = munmap(buff->data, buff->size);
-	}
-	else if (type == 'S') {
-		free(buff->data);
-	}
-
-	return err;
-}
-
-
-int write_file_cmd(hid_device *dev)
-{
-	long int offset = 0, addr = 0, size = 0;
-	int res;
-	write_file_buff_t buff;
-
-	char *type = strtok(NULL, " ");
-	char *str = strtok(NULL, "\"");
-	char *tok = strtok(NULL, " ");
-
-	if (tok != NULL) {
-		 offset = strtol(tok, NULL, 0);
-		 tok = strtok(NULL, " ");
-	}
-
-	if (tok != NULL) {
-		 addr = strtol(tok, NULL, 0);
-		 tok = strtok(NULL, " ");
-	}
-
-	if (tok != NULL)
-		 size = strtol(tok, NULL, 0);
-
-	if ((res = get_buffer(*type, str, &buff)) < 0)
-		return res;
-
-	if (size)
-		size = MIN(size, buff.size);
-	else
-		size = buff.size;
-
-	res = sdp_writeFile(dev, addr, buff.data + offset, size);
-	close_buffer(*type, &buff);
-
-	return res;
-}
-
-
-int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t data)
+static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t data)
 {
 	int rc;
 	unsigned char b[BUF_SIZE] = { 0 };
@@ -362,30 +105,26 @@ int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uint32_t d
 	set_write_reg_cmd(b + 1, addr, format, data);
 
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
-		fprintf(stderr, "Failed to send write_register command (%d)\n", rc);
-		return rc;
+		fprintf(stderr, "Failed to send write_register command (rc=%d)\n", rc);
+		return SCRIPT_ERROR;
 	}
 
 	/* Receive report 3 */
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
-		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
-		return -1;
+		fprintf(stderr, "Failed to receive HAB mode (rc=%d)\n", rc);
+		return SCRIPT_ERROR;
 	}
 
-	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || memcmp(b + 1, &pattern, 4))
-		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 0 || memcmp(b + 1, &pattern, 4)) {
+		fprintf(stderr, "Failed to receive complete status (rc=%d, status=%02x%02x%02x%02x)\n", rc, b[1], b[2], b[3], b[4]);
+		return SCRIPT_ERROR;
+	}
 
-	return rc;
+	return SCRIPT_OK;
 }
 
 
-void print_progress(size_t sent, size_t all)
-{
-	fprintf(stderr, "\r - Sent (%lu/%lu) %5.2f%%     ", sent, all, ((float)sent / (float)all) * 100.0);
-}
-
-
-int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
+static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 {
 	int n, rc;
 	ssize_t offset = 0;
@@ -395,9 +134,10 @@ int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 	/* Send write command */
 	b[0] = 1;
 	set_write_file_cmd(b + 1, addr, size);
+
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
-		return rc;
+		return SCRIPT_ERROR;
 	}
 
 	/* Send contents */
@@ -406,198 +146,462 @@ int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
 		memcpy(b + 1, data + offset, n);
 		offset += n;
-		print_progress(offset, size);
+
+		/* print progress */
+		fprintf(stderr, "\r - Sent (%lu/%lu) %3.0f%% ", offset, size, ((float)offset / (float)size) * 100.0f);
+
 		if ((rc = hid_write(dev, b, n + 1)) < 0) {
-			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
-			return rc;
+			fprintf(stderr, "\nFailed to send image contents (rc=%d)\n", rc);
+			return SCRIPT_ERROR;
 		}
 	}
 	fprintf(stderr, "\n");
 
 	/* Receive report 3 */
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
-		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
-		return -1;
+		fprintf(stderr, "Failed to receive HAB mode (rc=%d)\n", rc);
+		return SCRIPT_ERROR;
 	}
 
-	if ((rc = hid_read(dev, b, BUF_SIZE) < 0) || memcmp(b + 1, &pattern, 4))
-		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
+	if ((rc = hid_read(dev, b, BUF_SIZE)) < 0 || memcmp(b + 1, &pattern, 4)) {
+		fprintf(stderr, "Failed to receive complete status (rc=%d, status=%02x%02x%02x%02x)\n", rc, b[1], b[2], b[3], b[4]);
+		return SCRIPT_ERROR;
+	}
 
 	fprintf(stderr, " - File has been written correctly.\n");
 
-	return rc;
+	return SCRIPT_OK;
 }
 
 
-int sdp_dcdWrite(hid_device *dev, uint32_t addr, void *data, size_t size)
-{
-	int n, rc;
-	ssize_t offset = 0;
-	unsigned char b[BUF_SIZE] = { 0 };
-	const uint32_t pattern = 0x128a8a12;
-
-	/* Send write command */
-	b[0] = 1;
-	set_dcd_write_cmd(b + 1, addr, size);
-	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
-		fprintf(stderr, "Failed to send dcd_write command (%d)\n", rc);
-		return rc;
-	}
-
-	/* Send contents */
-	b[0] = 2;
-	while (offset < size) {
-		n = (BUF_SIZE - 1 > size - offset) ? (size - offset) : (BUF_SIZE - 1);
-		memcpy(b + 1, data + offset, n);
-		offset += n;
-		if ((rc = hid_write(dev, b, n + 1)) < 0) {
-			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
-			return rc;
-		}
-	}
-
-	//Receive report 3
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE)) < 5) {
-		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
-		return -1;
-	}
-
-	if ((rc = hid_get_feature_report(dev, b, BUF_SIZE) < 0) || memcmp(b + 1, &pattern, 4))
-		fprintf(stderr, "Failed to receive complete status (status=%02x%02x%02x%02x)\n", b[1], b[2], b[3], b[4]);
-
-	return rc;
-}
-
-
-int sdp_jmpAddr(hid_device *dev, uint32_t addr)
+static int sdp_jmpAddr(hid_device *dev, uint32_t addr)
 {
 	int rc;
 	unsigned char b[BUF_SIZE] = { 0 };
 
 	fprintf(stderr, " - To the address: %#x\n", addr);
+
 	/* Send write command */
 	b[0] = 1;
 	set_jmp_cmd(b + 1, addr);
+
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
-		fprintf(stderr, "Failed to send jump_address command (%d)\n", rc);
+		fprintf(stderr, "Failed to send jump_address command (rc=%d)\n", rc);
 		return rc;
 	}
 
 	/* Receive report 3 */
 	if ((rc = hid_read(dev, b, BUF_SIZE)) < 5) {
-		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+		fprintf(stderr, "Failed to receive HAB mode (rc=%d)\n", rc);
 		return -1;
 	}
 
-	return rc;
+	return SCRIPT_OK;
 }
 
 
-int sdp_errStatus(hid_device *dev)
+static int sdp_errStatus(hid_device *dev)
 {
 	unsigned char b[INTERRUPT_SIZE] = { 0 };
 	int rc;
+
 	b[0] = 1;
 	set_status_cmd(b + 1);
 
-	if((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
-		fprintf(stderr, "Failed to send status command (%d)\n", rc);
+	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
+		fprintf(stderr, "Failed to send status command (rc=%d)\n", rc);
 		return rc;
 	}
 
-	if((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 5) {
-		fprintf(stderr, "Failed to receive HAB mode (n=%d)\n", rc);
+	if ((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 5) {
+		fprintf(stderr, "Failed to receive HAB mode (rc=%d)\n", rc);
 		return rc;
 	}
 
-	if((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 0) {
-		fprintf(stderr, "Failed to receive status (n=%d)\n", rc);
+	if ((rc = hid_read(dev, b, INTERRUPT_SIZE)) < 0) {
+		fprintf(stderr, "Failed to receive status (rc=%d)\n", rc);
 		return rc;
 	}
 
-	return rc;
+	return SCRIPT_OK;
 }
 
 
-int execute_line(char *line, size_t len, size_t lineno, hid_device **dev)
+static inline int8_t char_to_hex(char c)
 {
-	int err = 0;
-	char *tok = strtok(line, " ");
-	size_t toklen = strlen(tok);
-
-	if (tok[0] != '\n' && tok[0] != '#') { /* Skip empty lines and comments */
-		if (tok[toklen - 1] == '\n')
-			tok[--toklen] = '\0';
-
-		fprintf(stderr, "Parsing %lu: '%s'\n", lineno, tok);
-
-		if (!strcmp(tok, "WAIT")) {
-			err = wait_cmd(dev);
-		}
-		else if(!strcmp(tok, "WRITE_FILE")) {
-			err = write_file_cmd(*dev);
-		}
-		else if(!strcmp(tok, "WRITE_REGISTER")) {
-			err = write_reg_cmd(*dev);
-		}
-		else if(!strcmp(tok, "JUMP_ADDRESS")) {
-			err = jump_addr_cmd(*dev);
-		}
-		else if(!strcmp(tok, "ERROR_STATUS")) {
-			err = err_status_cmd(*dev);
-		}
-		else if(!strcmp(tok, "DCD_WRITE")) {
-		}
-		else if(!strcmp(tok, "PROMPT")) {
-		}
-		else if(!strcmp(tok, "REBOOT")) {
-		}
-		else {
-			fprintf(stderr, "Unrecognized token '%s' at line %lu\n", tok, lineno);
-			err = -1;
-		}
+	if (c >= '0' && c <= '9') {
+		return c - '0';
+	}
+	else if (c >= 'a' && c <= 'f') {
+		return c - 'a' + 10;
+	}
+	else if (c >= 'A' && c <= 'F') {
+		return c - 'A' + 10;
 	}
 
-	return err;
+	return SCRIPT_ERROR;
 }
+
+
+static int parse_byte_string(script_blob_t str, script_blob_t *blob)
+{
+	void *ptr = blob->ptr;
+
+	if (!(blob->ptr = realloc(ptr, str.end - str.ptr + 1 ))) {
+		*blob = SCRIPT_BLOB_EMPTY;
+		free(ptr);
+
+		fprintf(stderr, "Unable to allocate memory.\n");
+
+		return SCRIPT_ERROR;
+	}
+
+	for (blob->end = blob->ptr; str.ptr < str.end; str.ptr++) {
+		if (*str.ptr != '\\') {
+			*blob->end++ = *str.ptr;
+			continue;
+		}
+
+		str.ptr++;
+
+		if (*str.ptr == '\\') {
+			*blob->end++ = *str.ptr;
+			continue;
+		}
+		else if (*str.ptr == 'x' || *str.ptr == 'X') {
+			*blob->end    = (char_to_hex(*(++str.ptr)) & 0xf) << 4;
+			*blob->end++ |= (char_to_hex(*(++str.ptr)) & 0xf);
+			continue;
+		}
+
+		free(blob->ptr);
+		blob->ptr = NULL;
+
+		fprintf(stderr, "Malformed byte string passed.\n");
+		return SCRIPT_ERROR;
+	}
+
+	return SCRIPT_OK;
+}
+
+
+static int close_buffer(int type, script_blob_t *blob)
+{
+	if (type == 'F') {
+		return munmap(blob->ptr, blob->end - blob->ptr);
+	}
+	else if (type == 'S') {
+		free(blob->ptr);
+	}
+
+	*blob = SCRIPT_BLOB_EMPTY;
+
+	return SCRIPT_OK;
+}
+
+
+static int get_buffer(script_t *s, int type, script_blob_t str, script_blob_t *blob)
+{
+	int fd;
+	struct stat statbuf;
+
+	if (type == 'F') {
+		char *name = strndup(str.ptr, str.end - str.ptr);
+
+		if ((fd = open(name, O_RDONLY)) < 0)
+			s->errstr = "File not found.";
+
+		free(name);
+
+		if (!s->errstr) {
+			fstat(fd, &statbuf);
+			if ((blob->ptr = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0))) {
+				blob->end = blob->ptr + statbuf.st_size;
+			}
+			else {
+				s->errstr = "Unable to mmap file.";
+			}
+
+			close(fd);
+		}
+	}
+	else if (type == 'S') {
+		if (parse_byte_string(str, blob) < 0)
+			s->errstr = "Error while parsing byte string.";
+	}
+
+	if (s->errstr) {
+		s->next.str = str;
+		return SCRIPT_ERROR;
+	}
+
+	if (s->flags & SCRIPT_F_DRYRUN) {
+		close_buffer(type, blob);
+	}
+	else {
+		fprintf(stderr, " - Sending to the device: %.*s\n", (int)(str.end - str.ptr), str.ptr);
+	}
+
+	return SCRIPT_OK;
+}
+
+
+static int wait_cmd(script_t *s)
+{
+	int retries;
+	long int vid, pid;
+	hid_device **dev = (hid_device **)s->arg;
+
+	if (*dev != NULL)
+		hid_close(*dev);
+
+	if (script_expect(s, script_tok_integer, "VID number was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	vid = s->token.num & 0xffff;
+
+	if (script_expect(s, script_tok_integer, "PID number was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	pid = s->token.num & 0xffff;
+
+	if (s->flags & SCRIPT_F_DRYRUN)
+		return SCRIPT_OK;
+
+	for (retries = 10; ; retries--) {
+		fprintf(stderr, "Waiting (%02d sec) for USB hid device %04x:%04x.\r", retries, (int)vid, (int)pid);
+
+		sleep(1);
+
+		if ((*dev = open_device(vid, pid)) != NULL)
+			break;
+
+		if (retries > 0)
+			continue;
+
+		s->errstr = "Timeout";
+
+		return SCRIPT_ERROR;
+	}
+
+	return SCRIPT_OK;
+}
+
+
+static int write_reg_cmd(script_t *s)
+{
+	long int addr, data, format;
+	hid_device *dev = *(hid_device **)s->arg;
+
+	if (script_expect(s, script_tok_integer, "Address value was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	addr = s->token.num;
+
+	if (script_expect(s, script_tok_integer, "Data value was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	data = s->token.num;
+
+	if (script_expect(s, script_tok_integer, "Format value was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	format = s->token.num;
+
+	if (s->flags & SCRIPT_F_DRYRUN)
+		return SCRIPT_OK;
+
+	if (!dev) {
+		s->errstr = "Device not available";
+		return SCRIPT_ERROR;
+	}
+
+	if (sdp_writeRegister(dev, addr, format, data) == SCRIPT_OK)
+		return SCRIPT_OK;
+
+	s->errstr = "Command failed";
+
+	return SCRIPT_ERROR;
+}
+
+
+static int jump_addr_cmd(script_t *s)
+{
+	long int addr;
+	hid_device *dev = *(hid_device **)s->arg;
+
+	if (script_expect(s, script_tok_integer, "Address value was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	addr = s->token.num;
+
+	if (s->flags & SCRIPT_F_DRYRUN)
+		return SCRIPT_OK;
+
+	if (!dev) {
+		s->errstr = "Device not available";
+		return SCRIPT_ERROR;
+	}
+
+	if (sdp_jmpAddr(dev, addr) == SCRIPT_OK)
+		return SCRIPT_OK;
+
+	s->errstr = "Command failed";
+
+	return SCRIPT_ERROR;
+}
+
+
+static int err_status_cmd(script_t *s)
+{
+	hid_device *dev = *(hid_device **)s->arg;
+
+	if (s->flags & SCRIPT_F_DRYRUN)
+		return SCRIPT_OK;
+
+	if (!dev) {
+		s->errstr = "Device not available";
+		return SCRIPT_ERROR;
+	}
+
+	if (sdp_errStatus(dev) == SCRIPT_OK)
+		return SCRIPT_OK;
+
+	s->errstr = "Command failed";
+
+	return SCRIPT_ERROR;
+}
+
+
+static int write_file_cmd(script_t *s)
+{
+	int type, res;
+	script_blob_t str;
+	script_blob_t blob = SCRIPT_BLOB_EMPTY;
+	long int offset = 0, addr = 0, size = 0;
+	hid_device *dev = *( hid_device **)s->arg;
+
+
+	if (!(s->next.str.end - s->next.str.ptr == 1 && (*s->next.str.ptr == 'F' || *s->next.str.ptr == 'S'))) {
+		s->errstr = "Type F or S expected";
+		return SCRIPT_ERROR;
+	}
+
+	if (script_expect(s, script_tok_identifier, "Literal F or S expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	type = *s->token.str.ptr;
+
+	if (script_expect(s, script_tok_string, "String in quotes was expected") != SCRIPT_OK)
+		return SCRIPT_ERROR;
+
+	str = s->token.str;
+
+	if (script_expect_opt(s, script_tok_integer, "Optional <offset> value was expected") == SCRIPT_OK)
+		offset = s->token.num;
+
+	if (s->errstr)
+		return SCRIPT_ERROR;
+
+	if (script_expect_opt(s, script_tok_integer, "Optional <address> value was expected") == SCRIPT_OK)
+		addr = s->token.num;
+
+	if (s->errstr)
+		return SCRIPT_ERROR;
+
+	if (script_expect_opt(s, script_tok_integer, "Optional <size> value was expected") == SCRIPT_OK)
+		size = s->token.num;
+
+	if (s->errstr)
+		return SCRIPT_ERROR;
+
+	if (get_buffer(s, type, str, &blob) < 0)
+		return SCRIPT_ERROR;
+
+	if (s->flags & SCRIPT_F_DRYRUN)
+		return SCRIPT_OK;
+
+	if (size) {
+		size = MIN(size, blob.end - blob.ptr);
+	}
+	else {
+		size = blob.end - blob.ptr;
+	}
+
+	res = SCRIPT_ERROR;
+
+	if (dev)
+		res = sdp_writeFile(dev, addr, blob.ptr + offset, size);
+
+	close_buffer(type, &blob);
+
+	if (res == SCRIPT_OK)
+		return SCRIPT_OK;
+
+	s->errstr = "Device not available";
+
+	return SCRIPT_ERROR;
+}
+
+
+static int not_implemented_cmd(script_t *s)
+{
+	s->errstr = "This function is not yet implemented.";
+
+	return SCRIPT_ERROR;
+}
+
+
+/*
+ * NOTE: because binary search is used, function names
+ * must be sorted in lexical order, use upper-case,
+ * the list must be terminated with a NULL element.
+ */
+static const script_funct_t funcs[] = {
+	{ "DCD_WRITE", not_implemented_cmd },
+	{ "ERROR_STATUS", err_status_cmd },
+	{ "JUMP_ADDRESS", jump_addr_cmd },
+	{ "PROMPT", not_implemented_cmd },
+	{ "REBOOT", not_implemented_cmd },
+	{ "WAIT", wait_cmd },
+	{ "WRITE_FILE", write_file_cmd },
+	{ "WRITE_REGISTER", write_reg_cmd },
+	{ NULL },
+};
 
 
 int main(int argc, char *argv[])
 {
-	FILE *script;
-	int res = 0;
-	int err = 0;
-	size_t len = 1024, lineno = 0;
-	char *buff = malloc(len);
+	int res = -1;
+	script_t script;
 	hid_device *dev = NULL;
 
-	if (argc != 2) {
-		usage(argv[0]);
+	if (argc < 2)
+		return usage(argv[0]);
+
+	if (script_load(&script, argv[1]) != SCRIPT_OK)
+		return -1;
+
+	script_set_funcs(&script, funcs, &dev);
+
+	/* First interpret script in dry-run mode to check syntax
+	 * and if files specified in the script exist and check
+	 * if they are readable
+	 */
+	if (script_parse(&script, SCRIPT_F_DRYRUN) != SCRIPT_OK) {
+		script_close(&script);
+		fprintf(stderr, "Exiting due to error in script file.\n");
 		return -1;
 	}
 
-	hid_init();
-	/* Interpret script */
-	script = fopen(argv[1], "r");
-	while (script != NULL && (res = getline(&buff, &len, script)) > 0) {
-		if ((err = execute_line(buff, res, lineno++, &dev)) < 0) {
-			fprintf(stderr, "Error at line %lu\n", lineno - 1);
-			break;
-		}
+	if (!hid_init()) {
+		/* Interpret script, now things like memalloc, hid device comm. may fail */
+		res = script_parse(&script, SCRIPT_F_SHOWLINES);
+		hid_close(dev);
+		hid_exit();
 	}
 
-	fprintf(stderr,"\n------------------\n");
-	if (err)
-		fprintf(stderr, "%d error(s) occured. Device may not boot correctly after restart.\n", err);
-	else
-		fprintf(stderr, "All done. Restart the device to boot from internal storage.\n");
-
-	if (script)
-		fclose(script);
-
-	hid_close(dev);
-	hid_exit();
-	free(buff);
+	script_close(&script);
 
 	return res;
 }
