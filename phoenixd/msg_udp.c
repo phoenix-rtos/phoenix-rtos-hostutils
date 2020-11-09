@@ -121,7 +121,7 @@ int udp_open(char *node, uint port)
 		u8 buff[MSG_MAXLEN * 2 + MSG_HDRSZ * 2];
 		unsigned int i = 0;
 
-
+		memset(&bcast_msg, 0, sizeof(bcast_msg));
 		msg_settype(&bcast_msg, MSG_HELLO);
 		msg_setlen(&bcast_msg, sizeof(bcast_in));
 		memcpy(bcast_msg.data, &addr_in, sizeof(addr_in));

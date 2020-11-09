@@ -244,7 +244,7 @@ int send_mod_name(hid_device *dev, mod_t *mod, uint32_t addr)
 	/* Send name */
 	b[0] = 2;
 	memcpy(b + 1, mod->name, strlen(mod->name) + 1);
-	if((rc = hid_write(dev, b, strlen(mod->name) + 2)) < 0) {
+	if ((rc = hid_write(dev, b, strlen(mod->name) + 2)) < 0) {
 		fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
 		return rc;
 	}
@@ -280,7 +280,7 @@ int send_mod_args(hid_device *dev, mod_t *mod, uint32_t addr)
 		/* Send arguments */
 		b[0] = 2;
 		memcpy(b + 1, mod->args, argsz);
-		if((rc = hid_write(dev, b, argsz + 1)) < 0) {
+		if ((rc = hid_write(dev, b, argsz + 1)) < 0) {
 			fprintf(stderr, "\nFailed to send image name (%d)\n", rc);
 			return rc;
 		}
@@ -313,7 +313,7 @@ int send_mod_contents(hid_device *dev, mod_t *mod, uint32_t addr)
 		if ((i++ % 50) == 0) {
 			print_progress(offset, mod->size);
 		}
-		if((rc = hid_write(dev, b, n + 1)) < 0) {
+		if ((rc = hid_write(dev, b, n + 1)) < 0) {
 			print_progress(offset, mod->size);
 			fprintf(stderr, "\nFailed to send image contents (%d)\n", rc);
 			return rc;
@@ -374,13 +374,16 @@ static void syspage_dump(syspage_t *s)
 	}
 }
 
-int count_sysprogs(char *initrd, char *console, char *append, int *sysprogs_sz)
+static int count_sysprogs(char *initrd, char *console, char *append, int *sysprogs_sz)
 {
 	int cnt = 0, sz = 0, pfd;
 	struct stat pstat;
 	char *progs, *prog;
 
-	asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ");
+	if (asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ") < 0) {
+		return -1; /* memalloc in asprintf has failed */
+	}
+
 	prog = strtok(progs, " ");
 
 	while (prog) {
@@ -409,12 +412,15 @@ next:
 	return cnt;
 }
 
-int append_sysprogs(void *image, char *initrd, char *console, char *append, syspage_t *syspage, size_t offset, unsigned int addr)
+static int append_sysprogs(void *image, char *initrd, char *console, char *append, syspage_t *syspage, size_t offset, unsigned int addr)
 {
 	int i = 0, j = 0, pfd, cnt;
 	char *progs, *prog;
 
-	asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ");
+	if (asprintf(&progs, "%s %s %s", console ? console : " ", initrd ? initrd : " ",  append ? append : " ") < 0) {
+		return -1; /* memalloc in asprintf has failed */
+	}
+
 	prog = strtok(progs, " ");
 
 	while (prog) {
@@ -481,7 +487,11 @@ int boot_image(char *kernel, char *initrd, char *console, char *append, char *ou
 		return -1;
 	}
 
-	sysprogs_cnt = count_sysprogs(initrd, console, append, &sysprogs_sz);
+	if ((sysprogs_cnt = count_sysprogs(initrd, console, append, &sysprogs_sz)) < 0) {
+		printf("Memory allocation failed\n");
+		close(kfd);
+		return -1;
+	}
 
 	size = kstat.st_size + sysprogs_sz;
 
@@ -527,7 +537,12 @@ int boot_image(char *kernel, char *initrd, char *console, char *append, char *ou
 	strncpy(syspage->arg, arg ? arg : "", sizeof(syspage->arg));
 	syspage->progssz = sysprogs_cnt;
 
-	offset = append_sysprogs(image, initrd, console, append, syspage, offset, addr);
+	if ((offset = append_sysprogs(image, initrd, console, append, syspage, offset, addr)) < 0) {
+		printf("Memory allocation failed\n");
+		free(syspage);
+		free(image);
+		return -1;
+	};
 
 	if (plugin) {
 		plugin_sz = *(int *)(image + 0x424);
