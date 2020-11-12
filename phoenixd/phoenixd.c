@@ -35,7 +35,7 @@ extern char *optarg;
 #define VERSION "1.5"
 
 
-int phoenixd_session(char *tty, char *kernel, char *sysdir)
+int phoenixd_session(char *tty, char *kernel, char *sysdir, speed_t baudrate)
 {
 	u8 t;
 	int fd, count, err;
@@ -43,7 +43,7 @@ int phoenixd_session(char *tty, char *kernel, char *sysdir)
 
 	fprintf(stderr, "[%d] Starting phoenixd-child on %s\n", getpid(), tty);
 
-	if ((fd = serial_open(tty, B460800)) < 0) {
+	if ((fd = serial_open(tty, baudrate)) < 0) {
 		fprintf(stderr, "[%d] Can't open %s [%d]!\n", getpid(), tty, fd);
 		return ERR_PHOENIXD_TTY;
 	}
@@ -135,6 +135,7 @@ int main(int argc, char *argv[])
 	char *append = NULL;
 	char *output = NULL;
 
+	speed_t speed = B460800;
 	char *sysdir = "../sys";
 	char *ttys[8];
 	mode_t mode[8] = {SERIAL};
@@ -151,6 +152,7 @@ int main(int argc, char *argv[])
 		{"append", required_argument, 0, 'a'},
 		{"execute", required_argument, 0, 'x'},
 		{"help", no_argument, 0, 'h'},
+		{"baudrate", required_argument, 0, 'b'},
 		{"output", required_argument, 0, 'o'},
 		{0, 0, 0, 0}};
 
@@ -160,7 +162,7 @@ int main(int argc, char *argv[])
 		"\n");
 
 	while (1) {
-		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:", long_opts, &opt_idx);
+		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:b:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
@@ -174,7 +176,12 @@ int main(int argc, char *argv[])
 		case '1':
 			bspfl = 1;
 			break;
-
+		case 'b' :
+			if (serial_int2speed(atoi(optarg), &speed) < 0) {
+				fprintf(stderr, "Wrong baudrate's value!\n");
+				return ERR_ARG;
+			}
+			break;
 		case 'm':
 			if (i < 8) {
 				mode[i] = PIPE;
@@ -271,7 +278,7 @@ int main(int argc, char *argv[])
 			continue;
 		} else if(res == 0) {
 			if (bspfl)
-				res = phoenixd_session(ttys[k], kernel, sysdir);
+				res = phoenixd_session(ttys[k], kernel, sysdir, speed);
 			else if(mode[k] == USB_VYBRID) {
 				char *jumAddr = NULL;
 				if ((jumAddr = strchr(ttys[k], ':')) != NULL)
@@ -292,14 +299,12 @@ int main(int argc, char *argv[])
 
 					if (speed_port == 0 || speed_port > 0xffff)
 						speed_port = PHFS_DEFPORT;
+
+					res = dispatch(ttys[k], mode[k], sysdir, (void *)&speed_port);
 				}
 				else {
-					speed_port = B460800;
-					if (speed_port == B115200)
-						speed_port = 460800;
+					res = dispatch(ttys[k], mode[k], sysdir, (void *)&speed);
 				}
-
-				res = dispatch(ttys[k], mode[k], speed_port, sysdir);
 			}
 			return res;
 		} //else

@@ -57,19 +57,25 @@ static int connect_pipes(const char *dev_in, const char *dev_out, int *fd_in, in
 
 
 /* Function reads and dispatches messages */
-int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir)
+int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data)
 {
 	int fd = -1;
 	int fd_out = -1;
 	int retries = 128;
+	int baudrate;
 	msg_t msg;
 	int state, err;
 	char *dev_in = 0;
 	char *dev_out = 0;
 
-	printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%u)\n", getpid(), dev_addr, speed_port);
+
 	if (mode == SERIAL) {
-		if ((fd = serial_open(dev_addr, speed_port)) < 0) {
+		if (serial_speed2int(*(speed_t *)data, &baudrate) < 0) {
+			fprintf(stderr, "[%d] dispatch: Wrong speed port\n", getpid());
+			return ERR_DISPATCH_IO;
+		}
+		printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%d)\n", getpid(), dev_addr, baudrate);
+		if ((fd = serial_open(dev_addr, *(speed_t *)data)) < 0) {
 			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev_addr);
 			return ERR_DISPATCH_IO;
 		}
@@ -77,8 +83,8 @@ int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir
 		msg_recv = msg_serial_recv;
 	}
 	else if (mode == UDP) {
-		if ((fd = udp_open(dev_addr, speed_port)) < 0) {
-			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%u'\n", getpid(), dev_addr, speed_port);
+		if ((fd = udp_open(dev_addr, *(uint *)data)) < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%u'\n", getpid(), dev_addr, *(uint *)data);
 			return ERR_DISPATCH_IO;
 		}
 		msg_send = msg_udp_send;

@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * Serial interface accessing routines
@@ -22,18 +22,19 @@
 #include "types.h"
 
 
-#ifndef B460800
-#define B460800 B115200
-#endif
-
-
-extern int serial_open(char *dev, uint speed);
+extern int serial_open(char *dev, speed_t speed);
 
 
 extern int serial_read(int fd, u8 *buff, uint len, uint timeout);
 
 
 extern int serial_write(int fd, u8 *buff, uint len);
+
+
+extern int serial_int2speed(int baudrate, speed_t *speed);
+
+
+extern int serial_speed2int(speed_t speed, int *baudrate);
 
 
 #endif
