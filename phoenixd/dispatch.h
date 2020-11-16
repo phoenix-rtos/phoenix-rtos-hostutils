@@ -17,6 +17,8 @@
 #define _DISPATCH_H_
 #include "msg.h"
 
+#include <termio.h>
+
 
 typedef enum {
 	SERIAL,
@@ -28,7 +30,7 @@ typedef enum {
 
 
 /* Function reads and dispatches messages */
-extern int dispatch(char *dev_addr, dmode_t mode, unsigned int speed_port, char *sysdir);
+extern int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data);
 extern int (*msg_send)(int fd, msg_t *msg, u16 seq);
 extern int (*msg_recv)(int fd, msg_t *msg, int *state);
 
