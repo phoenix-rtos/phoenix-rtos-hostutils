@@ -17,7 +17,7 @@
 #define _DISPATCH_H_
 #include "msg.h"
 
-#include <termio.h>
+#include <termios.h>
 
 
 typedef enum {

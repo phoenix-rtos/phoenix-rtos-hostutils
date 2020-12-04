@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 	char *append = NULL;
 	char *output = NULL;
 
-	speed_t speed = B460800;
+	speed_t speed;
 	char *sysdir = "../sys";
 	char *ttys[8];
 	mode_t mode[8] = {SERIAL};
@@ -160,6 +160,11 @@ int main(int argc, char *argv[])
 		"(c) 2012 Phoenix Systems\n"
 		"(c) 2000, 2005 Pawel Pisarczyk\n"
 		"\n");
+
+	if (serial_int2speed(460800, &speed) < 0) {
+		fprintf(stderr, "Wrong baudrate's value!\n");
+		return ERR_ARG;
+	}
 
 	while (1) {
 		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:b:", long_opts, &opt_idx);
