@@ -153,7 +153,6 @@ int serial_speed2int(speed_t speed, int *baudrate)
 		case B115200:   *baudrate = 115200;  return 0;
 #ifdef __APPLE__
 		case B230400:   *baudrate = 115200;  return 0;
-		case B460800:   *baudrate = 115200;  return 0;
 #else
 		case B230400:   *baudrate = 230400;  return 0;
 		case B460800:   *baudrate = 460800;  return 0;
