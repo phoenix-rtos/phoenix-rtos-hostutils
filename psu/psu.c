@@ -362,6 +362,7 @@ static inline int8_t char_to_hex(char c)
 static int parse_byte_string(script_blob_t str, script_blob_t *blob)
 {
 	void *ptr = blob->ptr;
+	int8_t bh, bl;
 
 	if (!(blob->ptr = realloc(ptr, str.end - str.ptr + 1 ))) {
 		*blob = SCRIPT_BLOB_EMPTY;
@@ -385,9 +386,11 @@ static int parse_byte_string(script_blob_t str, script_blob_t *blob)
 			continue;
 		}
 		else if (*str.ptr == 'x' || *str.ptr == 'X') {
-			*blob->end    = (char_to_hex(*(++str.ptr)) & 0xf) << 4;
-			*blob->end++ |= (char_to_hex(*(++str.ptr)) & 0xf);
-			continue;
+			if (((bh = char_to_hex(*(++str.ptr))) != SCRIPT_ERROR) && ((bl = char_to_hex(*(++str.ptr))) != SCRIPT_ERROR)) {
+				*blob->end    = bh << 4;
+				*blob->end++ |= bl;
+				continue;
+			}
 		}
 
 		free(blob->ptr);
@@ -431,7 +434,7 @@ static int get_buffer(script_t *s, int type, script_blob_t str, script_blob_t *b
 
 		if (!s->errstr) {
 			fstat(fd, &statbuf);
-			if ((blob->ptr = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0))) {
+			if ((blob->ptr = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) != MAP_FAILED) {
 				blob->end = blob->ptr + statbuf.st_size;
 			}
 			else {
