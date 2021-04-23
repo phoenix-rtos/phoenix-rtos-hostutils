@@ -250,8 +250,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (output) {
-		if (kernel == NULL || initrd == NULL) {
-			fprintf(stderr, "Output file needs kernel and initrd paths\n");
+		if (kernel == NULL) {
+			fprintf(stderr, "Output file needs kernel path\n");
 			return -1;
 		}
 		res = boot_image(kernel, initrd, console, append, output, sdp == 2 ? 1 : 0);

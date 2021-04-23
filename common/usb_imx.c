@@ -392,7 +392,7 @@ static int count_sysprogs(char *initrd, char *console, char *append, int *syspro
 
 		cnt++;
 		if ((pfd = open(prog, O_RDONLY)) < 0) {
-			fprintf(stderr, "Could not open file %s\n", initrd);
+			fprintf(stderr, "Could not open file %s\n", prog);
 			goto next;
 		}
 
@@ -429,7 +429,7 @@ static int append_sysprogs(void *image, char *initrd, char *console, char *appen
 		syspage->progs[i].start = offset + addr;
 
 		if ((pfd = open(prog, O_RDONLY)) < 0) {
-			fprintf(stderr, "Can't open initrd file %s\n", initrd);
+			fprintf(stderr, "Could not open file %s\n", prog);
 			goto next;
 		}
 
