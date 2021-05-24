@@ -20,18 +20,18 @@ WRITE_FILE S "\x00\x00\x00\x80\xff\xff\xff\x87\x00\x00\x00\x00\x00\x80\x3a\x49\x
 # Run kernel
 JUMP_ADDRESS 0x80000708
 
-# Wait for psd 
+# Wait for psd
 WAIT 0x15a2 0x7d
 
 # Erase all data
 WRITE_REGISTER -3 128 8
 
-# Flash Firmware COnfiguration Block (FCB)
+# Flash Firmware Configuration Block (FCB)
 WRITE_REGISTER -5 1 8
 
 #Flash Discovered Bad Block Table (DBBT)
 WRITE_REGISTER -1 1 8 		#switch to /dev/flash1
-WRITE_REGISTER -5 2 8 
+WRITE_REGISTER -5 2 8
 
 WRITE_REGISTER -1 2 8 		#switch to /dev/flash2
 WRITE_FILE F "primary.img" 0
@@ -45,4 +45,4 @@ WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
 WRITE_REGISTER -1 5 8 		#switch to /dev/flash5
 WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
 
-WRITE_REGISTER -100 0 8		#close PSD 	
+WRITE_REGISTER -100 0 8		#close PSD
