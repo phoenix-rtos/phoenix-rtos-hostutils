@@ -111,7 +111,7 @@ int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data)
 				usleep(100000);
 				(void) connect_pipes(dev_in, dev_out, &fd, &fd_out);
 			}
-			continue;
+			break;
 		}
 		fprintf(stderr, "[%d] dispatch: Message received\n", getpid());
 
