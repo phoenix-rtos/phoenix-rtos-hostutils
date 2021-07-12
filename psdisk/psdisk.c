@@ -409,7 +409,7 @@ static int psdisk_parseToRm(void)
 		return -1;
 	}
 	else {
-		strncpy((char *)pNode->pHeader.name, optarg, strlen(optarg));
+		strncpy((char *)pNode->pHeader.name, optarg, sizeof(pNode->pHeader.name));
 	}
 
 	pNode->status = part_remove;
@@ -477,7 +477,7 @@ static int psdisk_parseToSave(void)
 			break;
 		}
 		else {
-			strncpy((char *)pNode->pHeader.name, opts[0], strlen(opts[0]));
+			strncpy((char *)pNode->pHeader.name, opts[0], sizeof(pNode->pHeader.name));
 		}
 
 		if (((pNode->pHeader.offset = strtoul(opts[1], &endptr, 0)) == 0 && strlen(endptr) != 0) || (pNode->pHeader.offset != 0 && strlen(endptr) != 0)) {
