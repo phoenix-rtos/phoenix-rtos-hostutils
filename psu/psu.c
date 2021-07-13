@@ -135,7 +135,8 @@ static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uin
 
 static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
 {
-	int n, rc;
+	int rc;
+	size_t n;
 	ssize_t offset = 0;
 	unsigned char b[BUF_SIZE] = { 0 };
 	const uint32_t pattern = 0x88888888;
@@ -158,6 +159,12 @@ static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size
 
 		/* print progress */
 		fprintf(stderr, "\r - Sent (%lu/%lu) %3.0f%% ", offset, size, ((float)offset / (float)size) * 100.0f);
+
+		/* Report 2 size has to be aligned to 16, information define in HID Report Descriptor - ID 2 */
+		if (n % 0x10) {
+			memset(b + 1 + n, 0, ((n + 0xf) & ~0xf) - n);
+			n = (n + 0xf) & ~0xf;
+		}
 
 		if ((rc = hid_write(dev, b, n + 1)) < 0) {
 			fprintf(stderr, "\nFailed to send image contents (rc=%d)\n", rc);
