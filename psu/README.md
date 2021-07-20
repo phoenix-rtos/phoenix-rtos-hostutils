@@ -33,9 +33,9 @@ SDP script syntax:
   |COMMAND | ADDRESS | VALUE |
   | --- | --- | --- |
   |CHANGE\_PARTITION|-1|file number|
-  |ERASE\_PARTITION\_ADDRESS |-2 |size to erase since the beginning of partition (or 0 for full partition)|
-  |ERASE\_CHIP\_ADDRESS |-3|size to erase since the beginning of chip (or 0 for full chip)|
-  |CHECK\_PRODUCTION |-4|none|
+  |ERASE\_PARTITION\_ADDRESS |-2 |size to erase since the beginning of partition (or 0 for full partition). Address format: 0-> just erase, 8-> erase and write jffs2 cleanmarkers, 16-> just write jffs2 cleanmarkers|
+  |~~ERASE\_CHIP\_ADDRESS~~ |-3|**obsolete, use ERASE_PARTITION_ADDRESS with flashX device** ~~size to erase since the beginning of chip (or 0 for full chip)~~|
+  |~~CHECK\_PRODUCTION~~ |-4|**obsolete** ~~none~~|
   |CONTROL\_BLOCK\_ADDRESS|-5|1 - FCB; 2 - DBBT|
   |BLOW\_FUSES|-6|none|
   |CLOSE\_PSD|-100|0|
