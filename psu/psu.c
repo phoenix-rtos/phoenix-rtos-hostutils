@@ -163,7 +163,17 @@ static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size
 		/* Report 2 size has to be aligned to 16, information define in HID Report Descriptor - ID 2 */
 		if (n % 0x10) {
 			memset(b + 1 + n, 0, ((n + 0xf) & ~0xf) - n);
-			n = (n + 0xf) & ~0xf;
+
+			/* Last packet has to be smaller */
+			if ((n = (n + 0xf) & ~0xf) == BUF_SIZE - 1) {
+				if ((rc = hid_write(dev, b, n + 1)) < 0) {
+					fprintf(stderr, "\nFailed to send image contents (rc=%d)\n", rc);
+					return SCRIPT_ERROR;
+				}
+
+				n = 0x10;
+				memset(b + 1, 0, n);
+			}
 		}
 
 		if ((rc = hid_write(dev, b, n + 1)) < 0) {
