@@ -1,0 +1,10 @@
+# Wait for device
+WAIT 0x15a2 0x80
+ERROR_STATUS
+
+WRITE_FILE F "plo-ram-armv7a7-imx6ull.img" 0 0x00907000
+
+# Jump to ivt_addr
+JUMP_ADDRESS 0x00907400
+
+
