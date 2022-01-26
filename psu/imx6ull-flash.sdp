@@ -41,13 +41,15 @@ WRITE_FILE F "kernel.img" 0
 WRITE_REGISTER -1 3 8       # switch to /dev/flash0p3
 WRITE_FILE F "kernel.img" 0
 
+# write cleanmarkers on JFFS2 partitions
 WRITE_REGISTER -1 4 8       # switch to /dev/flash0p4
+WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers
 WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
 
 WRITE_REGISTER -1 5 8       # switch to /dev/flash0p5
+WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers
 WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
 
-# write cleanmarkers on other JFFS2 partitions
 WRITE_REGISTER -1 6 8       # switch to /dev/flash0p6
 WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers
 
