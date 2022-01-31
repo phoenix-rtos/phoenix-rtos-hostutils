@@ -38,4 +38,5 @@ else
 	include phoenixd/Makefile
 	include psu/Makefile
 	include psdisk/Makefile
+	include syspagen/Makefile
 endif
