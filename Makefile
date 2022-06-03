@@ -10,7 +10,7 @@
 SIL ?= @
 MAKEFLAGS += --no-print-directory
 
-TARGET := host-pc
+TARGET := host-generic-pc
 
 include ../phoenix-rtos-build/Makefile.common
 include ../phoenix-rtos-build/Makefile.$(TARGET_SUFF)

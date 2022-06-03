@@ -14,7 +14,7 @@ CC = gcc
 CFLAGS = -c -Wall -I . -O2 -g -I /opt/local/include -I/usr/local/include
 LDFLAGS =
 LD = gcc
-TARGET := host-pc
+TARGET := host-generic-pc
 STRIP = strip
 
 TOPDIR := $(CURDIR)
