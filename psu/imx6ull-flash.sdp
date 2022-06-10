@@ -3,7 +3,7 @@ WAIT 0x15a2 0x80
 ERROR_STATUS
 
 # Load kernel part with DCD initializing DDR
-WRITE_FILE F "phoenix-armv7a7-imx6ull.img" 0 0x00907000 0x1000
+WRITE_FILE F "phoenix.img" 0 0x00907000 0x1000
 # Jump to ivt_addr
 JUMP_ADDRESS 0x00907400
 
@@ -12,7 +12,7 @@ WAIT 0x15a2 0x80
 ERROR_STATUS
 
 # Write whole image
-WRITE_FILE F "phoenix-armv7a7-imx6ull.img" 0 0x80000000
+WRITE_FILE F "phoenix.img" 0 0x80000000
 
 # Run kernel
 JUMP_ADDRESS 0x80000728
@@ -41,11 +41,11 @@ WRITE_FILE F "kernel.img" 0
 # write cleanmarkers on JFFS2 partitions
 WRITE_REGISTER -1 4 8       # switch to /dev/flash0p4
 WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers
-WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
+WRITE_FILE F "rootfs.jffs2" 0
 
 WRITE_REGISTER -1 5 8       # switch to /dev/flash0p5
 WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers
-WRITE_FILE F "phoenix-armv7a7-imx6ull.jffs2" 0
+WRITE_FILE F "rootfs.jffs2" 0
 
 WRITE_REGISTER -1 6 8       # switch to /dev/flash0p6
 WRITE_REGISTER -2 0 16      # clear the partiton - "0" means whole partition, "16" means JUST write JFSS2 clean markers

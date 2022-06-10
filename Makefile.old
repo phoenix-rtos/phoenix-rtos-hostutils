@@ -23,7 +23,7 @@ PREFIX_BUILD := $(abspath $(PREFIX_BUILD))
 BUILD_DIR := $(PREFIX_BUILD)/$(notdir $(TOPDIR))
 BUILD_DIR := $(abspath $(BUILD_DIR))
 
-PREFIX_BOOT := $(realpath "_boot")
+PREFIX_BOOT := $(realpath "_boot/$(TARGET)")
 
 # build artifacts dir
 CURR_SUFFIX := $(patsubst $(TOPDIR)/%,%,$(abspath $(CURDIR))/)

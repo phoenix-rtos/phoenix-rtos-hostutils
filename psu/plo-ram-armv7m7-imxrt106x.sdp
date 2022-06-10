@@ -7,7 +7,7 @@ WRITE_REGISTER 0x400ac040 0x200007 32
 WRITE_REGISTER 0x400ac044 0xaaaaabff 32
 
 # Write plo to ITCM
-WRITE_FILE F "plo-ram-armv7m7-imxrt106x.img" 0x100 0x100
+WRITE_FILE F "plo-ram.img" 0x100 0x100
 
 # Jump to ivt_addr and launch plo
 JUMP_ADDRESS 0x1050
