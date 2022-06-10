@@ -3,4 +3,4 @@ WAIT 0x1fc9 0x013d
 GET_PROPERTY
 
 # Write plo to ITCM
-LOAD_IMAGE "plo-ram-armv7m7-imxrt117x.img"
+LOAD_IMAGE "plo-ram.img"
