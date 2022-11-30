@@ -72,6 +72,7 @@ include phoenixd/Makefile
 include psu/Makefile
 include psdisk/Makefile
 include syspagen/Makefile
+include metaelf/Makefile
 
 all: $(PREFIX_PROG_STRIPPED)phoenixd $(PREFIX_PROG_STRIPPED)psu $(PREFIX_PROG_STRIPPED)psdisk $(PREFIX_PROG_STRIPPED)syspagen
 

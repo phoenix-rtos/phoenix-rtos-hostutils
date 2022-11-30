@@ -35,6 +35,7 @@ ifneq ($(T1),)
 .PHONY: $(T1)
 $(T1): all
 else
+	include metaelf/Makefile
 	include phoenixd/Makefile
 	include psu/Makefile
 	include psdisk/Makefile
