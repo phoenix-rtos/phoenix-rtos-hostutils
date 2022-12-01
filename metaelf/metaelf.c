@@ -22,6 +22,8 @@
 #include <libgen.h>
 #include <elf.h>
 
+#include "bswap.h"
+
 
 /* Place signature on unused pad bytes */
 #define EI_SIGNATURE_VALUE  (EI_PAD)
@@ -65,19 +67,19 @@ extern uint32_t crc32_calc(const uint8_t *buf, uint32_t len, uint32_t base);
 
 static uint16_t uint16(uint16_t val)
 {
-	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : __builtin_bswap16(val);
+	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : bswap_16(val);
 }
 
 
 static uint32_t uint32(uint32_t val)
 {
-	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : __builtin_bswap32(val);
+	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : bswap_32(val);
 }
 
 
 static uint64_t uint64(uint64_t val)
 {
-	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : __builtin_bswap64(val);
+	return (common.elf.ident[EI_DATA] == ENDIANNESS) ? val : bswap_64(val);
 }
 
 
