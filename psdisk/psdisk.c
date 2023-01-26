@@ -1,20 +1,19 @@
 /*
  * Phoenix-RTOS
  *
- * Phoenix Systems disk tool
+ * Phoenix Systems Disk Tool
  *
- * Copyright 2020 Phoenix Systems
- * Author: Hubert Buczynski
+ * Copyright 2020, 2023 Phoenix Systems
+ * Author: Hubert Buczynski, Lukasz Kosinski
  *
  * This file is part of Phoenix-RTOS.
  *
  * %LICENSE%
  */
 
-
+#include <endian.h>
 #include <errno.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -24,7 +23,7 @@
 
 
 /* TODO: change access to ptable.h */
-#include "../../phoenix-rtos-filesystems/ptable/ptable.h"
+#include "../../phoenix-rtos-corelibs/libptable/ptable.h"
 
 
 #define RESET                       "\033[0m"
@@ -40,7 +39,6 @@
 #define MEMORY_DECLARED(opts)       (opts & (1 << attr_memDeclare))
 #define PARTITIONS_DECLARED(opts)   (opts & (1 << attr_partsDeclare))
 #define PARTITIONS_REMOVE(opts)     (opts & (1 << attr_partsRemove))
-#define PTABLE_WITH_OFFSET(opts)    (opts & (1 << attr_ptableOffset))
 
 
 #define CREATE_IMG(opts)            (!FILE_EXIST(opts) && MEMORY_DECLARED(opts) && PARTITIONS_DECLARED(opts) && !PARTITIONS_REMOVE(opts))
@@ -48,30 +46,28 @@
 #define READ_IMG(opts)              (FILE_EXIST(opts) && MEMORY_DECLARED(opts) && !PARTITIONS_DECLARED(opts) && !PARTITIONS_REMOVE(opts))
 
 
+enum { attr_fileExists = 0, attr_memDeclare, attr_partsDeclare, attr_partsRemove };
 
-enum { attr_fileExists = 0, attr_memDeclare, attr_partsDeclare, attr_partsRemove, attr_ptableOffset };
 
 enum { part_save = 1, part_remove, part_update };
 
 
 struct plist_node_t {
-	ptable_partition_t pHeader;
+	ptable_part_t part;
 	uint8_t status;
-
 	LIST_ENTRY(plist_node_t) ptrs;
 };
 
 
 struct {
-	uint32_t pCnt;
-	memory_properties_t mem;
-	uint8_t opts;            /* individual bits define whether specific option is declared by user */
+	uint32_t count;
+	uint32_t memsz;
+	uint32_t blksz;
+	uint8_t opts; /* Individual bits define whether specific option is declared by user */
 	char *fileName;
 	FILE *file;
-
 	LIST_HEAD(plist_t, plist_node_t) list;
 } psdisk_common;
-
 
 
 /* Information functions */
@@ -81,6 +77,9 @@ static const char *psdisk_getTypeName(uint8_t type)
 	switch (type) {
 		case ptable_raw:
 			return "raw";
+
+		case ptable_jffs2:
+			return "jffs2";
 
 		case ptable_meterfs:
 			return "meterfs";
@@ -95,17 +94,17 @@ static void psdisk_printHelp(const char *app)
 {
 	printf("\nUsage:");
 	printf("\n\t%s -h", app);
-	printf("\n\t%s <image-path> -m <mem-size,sector-size>", app);
-	printf("\n\t%s <image-path> -m <mem-size,sector-size> [options]", app);
+	printf("\n\t%s <image-path> -m <mem-size,block-size>", app);
+	printf("\n\t%s <image-path> -m <mem-size,block-size> [options]", app);
 	printf("\n\nOptions:");
-	printf(HELP_ALIGMENT, "   - m ", "<mem-size,sector-size>", "declare memory's parameters");
+	printf(HELP_ALIGMENT, "   - m ", "<mem-size,block-size>", "declare memory parameters");
 	printf(HELP_ALIGMENT, "   - p ", "<name,offset,size,type>", "declare partition");
 	printf(HELP_ALIGMENT, "   - r ", "<name>", "remove partition");
-	printf(HELP_ALIGMENT, "   - o ", " ", "partition table is located in the last sector of memory");
 	printf(HELP_ALIGMENT, "   - h ", " ", "show help");
 	printf("\n");
-	printf("\nPartition types: \n");
+	printf("\nPartition types:\n");
 	printf("\t- meterfs = 0x75,\n");
+	printf("\t- jffs2 = 0x72,\n");
 	printf("\t- raw = 0x51.\n");
 	printf("\n\n");
 }
@@ -117,74 +116,81 @@ static void psdisk_showPartsTable(void)
 
 	fseek(psdisk_common.file, 0L, SEEK_END);
 	printf("\n");
-	printf(BOLDWHITE "File system %s: %ld bytes\n"RESET, psdisk_common.fileName, ftell(psdisk_common.file));
-	printf("Memory size %u bytes\n", psdisk_common.mem.memSize);
-	printf("Units: sector %u bytes \n", psdisk_common.mem.sectorSize);
+	printf(BOLDWHITE "Partition table %s: %ld bytes\n"RESET, psdisk_common.fileName, ftell(psdisk_common.file));
+	printf("Memory size: %u bytes\n", psdisk_common.memsz);
+	printf("Block size: %u bytes\n", psdisk_common.blksz);
 	printf("\n");
-	printf(BOLDWHITE PARTITION_HEADER_ALIGMENT RESET, "Name", "Start", "End", "Sectors", "Size", "Type");
+	printf(BOLDWHITE PARTITION_HEADER_ALIGMENT RESET, "Name", "Start", "End", "Blocks", "Size", "Type");
 	LIST_FOREACH(node, &psdisk_common.list, ptrs) {
-		printf(PARTITION_DATA_ALIGMENT, node->pHeader.name, node->pHeader.offset, node->pHeader.offset + node->pHeader.size,
-			   node->pHeader.size / psdisk_common.mem.sectorSize, node->pHeader.size, psdisk_getTypeName(node->pHeader.type));
+		printf(PARTITION_DATA_ALIGMENT, node->part.name, node->part.offset, node->part.offset + node->part.size,
+			   node->part.size / psdisk_common.blksz, node->part.size, psdisk_getTypeName(node->part.type));
 	}
 	printf("\n");
 }
 
 
-/* Callbacks to ptable library */
+/* Partition table read/write functions */
 
-static ssize_t psdisk_readImg(unsigned int addr, void *buff, size_t bufflen)
+static ptable_t *psdisk_readImg(void)
 {
-	int offs;
+	ptable_t *ptable;
+	uint32_t count, size;
 
-	if (PTABLE_WITH_OFFSET(psdisk_common.opts))
-		offs = addr;
-	else
-		offs = addr - (psdisk_common.mem.memSize - psdisk_common.mem.sectorSize);
-
-	if (fseek(psdisk_common.file, offs, SEEK_SET) != 0) {
-		fprintf(stderr,"Cannot change file position, err: %s.\n", strerror(errno));
-		return -1;
+	if (fseek(psdisk_common.file, 0, SEEK_SET) != 0) {
+		return NULL;
 	}
 
-	return fread(buff, sizeof(uint8_t), bufflen, psdisk_common.file);
-}
+	if (fread(&count, sizeof(count), 1, psdisk_common.file) != 1) {
+		return NULL;
+	}
+	count = le32toh(count);
 
-
-static ssize_t psdisk_writeImg(unsigned int addr, const void *buff, size_t bufflen)
-{
-	ssize_t res;
-	char *wBuff;
-
-	if (bufflen > psdisk_common.mem.sectorSize) {
-		fprintf(stderr,"Partition table exceeds sector size. Reduce number of partitions or increase sector size.");
-		return -1;
+	size = ptable_size(count);
+	if (size > psdisk_common.blksz) {
+		return NULL;
 	}
 
 	if (fseek(psdisk_common.file, 0, SEEK_SET) != 0) {
-		fprintf(stderr,"Cannot change file position, err: %s.\n", strerror(errno));
+		return NULL;
+	}
+
+	ptable = malloc(size);
+	if (ptable == NULL) {
+		return NULL;
+	}
+
+	if (fread(ptable, size, 1, psdisk_common.file) != 1) {
+		free(ptable);
+		return NULL;
+	}
+
+	if (ptable_deserialize(ptable, psdisk_common.memsz, psdisk_common.blksz) < 0) {
+		free(ptable);
+		return NULL;
+	}
+
+	return ptable;
+}
+
+
+static int psdisk_writeImg(ptable_t *ptable)
+{
+	uint32_t size;
+
+	if (fseek(psdisk_common.file, 0, SEEK_SET) != 0) {
+		return -1;
+	}
+	size = ptable_size(ptable->count);
+
+	if (ptable_serialize(ptable, psdisk_common.memsz, psdisk_common.blksz) < 0) {
 		return -1;
 	}
 
-	if ((wBuff = (char *)malloc(psdisk_common.mem.sectorSize)) == NULL) {
-		fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+	if (fwrite(ptable, size, 1, psdisk_common.file) != 1) {
 		return -1;
 	}
 
-	memset(wBuff, 0xff, psdisk_common.mem.sectorSize);
-
-	if (PTABLE_WITH_OFFSET(psdisk_common.opts)) {
-		while (addr > 0) {
-			fwrite(wBuff, sizeof(uint8_t), psdisk_common.mem.sectorSize, psdisk_common.file);
-			addr -= psdisk_common.mem.sectorSize;
-		}
-	}
-
-	memcpy(wBuff, buff, bufflen);
-	res = fwrite(wBuff, sizeof(uint8_t), psdisk_common.mem.sectorSize, psdisk_common.file);
-
-	free(wBuff);
-
-	return res;
+	return 0;
 }
 
 
@@ -192,99 +198,110 @@ static ssize_t psdisk_writeImg(unsigned int addr, const void *buff, size_t buffl
 
 static int psdisk_readPartsTable(void)
 {
-	int i;
-	uint32_t pCnt;
-	struct plist_node_t *pNode;
-	ptable_partition_t *pHeaders;
+	struct plist_node_t *node;
+	ptable_t *ptable;
+	uint32_t i;
+	int ret = 0;
 
-	if ((pHeaders = ptable_readPartitions(&pCnt, &psdisk_common.mem)) == NULL) {
-		fprintf(stderr,"The file contains incorrect partition table.\n");
+	ptable = psdisk_readImg();
+	if (ptable == NULL) {
+		fprintf(stderr, "The file contains incorrect partition table.\n");
 		return -1;
 	}
 
-	for (i = 0; i < pCnt; ++i) {
-		if ((pNode = (struct plist_node_t *)calloc(1, sizeof(struct plist_node_t))) == NULL) {
-			fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
-			free(pHeaders);
-			return -1;
+	for (i = 0; i < ptable->count; i++) {
+		node = calloc(1, sizeof(*node));
+		if (node == NULL) {
+			fprintf(stderr, "Cannot allocate memory, err: %s.\n", strerror(errno));
+			ret = -1;
+			break;
 		}
-		pNode->pHeader = pHeaders[i];
-		LIST_INSERT_HEAD(&psdisk_common.list, pNode, ptrs);
-		++psdisk_common.pCnt;
+		node->part = ptable->parts[i];
+		LIST_INSERT_HEAD(&psdisk_common.list, node, ptrs);
+		psdisk_common.count++;
 	}
+	free(ptable);
 
-	free(pHeaders);
-
-	return 0;
+	return ret;
 }
 
 
 static int psdisk_verifyPartsTable(void)
 {
-	int i = 0;
-	uint32_t pCnt;
-	struct plist_node_t *pNode;
-	ptable_partition_t *pHeaders;
+	struct plist_node_t *node;
+	ptable_t *ptable;
+	int ret = 0, i = 0;
 
-	/* Verify whether data was saved correctly */
-	if ((pHeaders = ptable_readPartitions(&pCnt, &psdisk_common.mem)) == NULL) {
-		fprintf(stderr,"The file contains incorrect partition table.\n");
+	ptable = psdisk_readImg();
+	if (ptable == NULL) {
+		fprintf(stderr, "The file contains incorrect partition table.\n");
 		return -1;
 	}
 
 	/* Verify values from file after writing */
-	LIST_FOREACH(pNode, &psdisk_common.list, ptrs) {
-		if (pNode->status == part_save) {
-			if (i >= psdisk_common.pCnt || memcmp(&pNode->pHeader, &pHeaders[i], sizeof(ptable_partition_t)) != 0) {
-				free(pHeaders);
-				return -1;
+	LIST_FOREACH(node, &psdisk_common.list, ptrs) {
+		if (node->status == part_save) {
+			if ((i >= psdisk_common.count) || (strcmp((const char *)&node->part.name, (const char *)&ptable->parts[i].name) != 0) ||
+				(node->part.offset != ptable->parts[i].offset) || (node->part.size != ptable->parts[i].size) ||
+				(node->part.type != ptable->parts[i].type)) {
+				ret = -1;
+				break;
 			}
-			++i;
+			i++;
 		}
 	}
+	free(ptable);
 
-	free(pHeaders);
-
-	return 0;
+	return ret;
 }
 
 
 static int psdisk_createPartsTable(void)
 {
-	int i = 0;
 	struct plist_node_t *node;
-	ptable_partition_t *pHeaders;
+	ptable_t *ptable;
+	uint32_t size;
+	int ret = 0, i = 0;
 
-	if ((pHeaders = (ptable_partition_t *)calloc(psdisk_common.pCnt, sizeof(ptable_partition_t))) == NULL) {
-		fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+	size = ptable_size(psdisk_common.count);
+	if (size > psdisk_common.blksz) {
+		fprintf(stderr, "Partition table exceeds block size. Reduce number of partitions or increase block size.\n");
 		return -1;
 	}
 
-	/* Copy partition table to temporary array */
+	ptable = calloc(1, size);
+	if (ptable == NULL) {
+		fprintf(stderr, "Cannot allocate memory, err: %s.\n", strerror(errno));
+		return -1;
+	}
+
+	/* Prepare partition table */
+	ptable->count = psdisk_common.count;
 	LIST_FOREACH(node, &psdisk_common.list, ptrs) {
-		if (node->status == part_save)
-			memcpy(&pHeaders[i++], &node->pHeader, sizeof(ptable_partition_t));
+		if (node->status == part_save) {
+			ptable->parts[i++] = node->part;
+		}
 	}
 
-	if (ptable_writePartitions(pHeaders, psdisk_common.pCnt, &psdisk_common.mem) < 0) {
-		fprintf(stderr,"Cannot write partition table to file %s.\n", psdisk_common.fileName);
-		free(pHeaders);
-		return -1;
+	if (psdisk_writeImg(ptable) < 0) {
+		fprintf(stderr, "Cannot write partition table to file %s.\n", psdisk_common.fileName);
+		ret = -1;
 	}
+	free(ptable);
 
-	free(pHeaders);
-
-	return 0;
+	return ret;
 }
 
 
 static int psdisk_createImg(void)
 {
-	if (psdisk_createPartsTable() < 0)
+	if (psdisk_createPartsTable() < 0) {
 		return -1;
+	}
 
-	if (psdisk_verifyPartsTable() < 0)
+	if (psdisk_verifyPartsTable() < 0) {
 		return -1;
+	}
 
 	psdisk_showPartsTable();
 
@@ -292,24 +309,25 @@ static int psdisk_createImg(void)
 }
 
 
-static int psdisk_updatePartsList(ptable_partition_t *pHeaders, uint32_t pCnt)
+static int psdisk_updatePartsList(ptable_t *ptable)
 {
-	int i, action;
-	struct plist_node_t *pNode, *newNode, *tempNode;
+	struct plist_node_t *node, *newNode, *tempNode;
+	int action;
+	uint32_t i;
 
-	for (i = 0; i < pCnt; ++i) {
-		/* Default action: partition from file differs from partition defines by user. */
+	for (i = 0; i < ptable->count; i++) {
+		/* Default action: partition from file differs from partition defined by the user */
 		action = part_save;
 
-		LIST_FOREACH(pNode, &psdisk_common.list, ptrs) {
-			if (strncmp((const char *)&pNode->pHeader.name, (const char *)&pHeaders[i].name, sizeof(pNode->pHeader.name)) == 0) {
-				/* Remove partition declare by user */
-				if (pNode->status == part_remove) {
+		LIST_FOREACH(node, &psdisk_common.list, ptrs) {
+			if (strcmp((const char *)&node->part.name, (const char *)&ptable->parts[i].name) == 0) {
+				/* Remove partition defined by the user */
+				if (node->status == part_remove) {
 					action = part_remove;
 					break;
 				}
-				/* Partition from file is updated by new one defines by user. */
-				else if (pNode->status == part_save) {
+				/* Update partition from file */
+				else if (node->status == part_save) {
 					action = part_update;
 					break;
 				}
@@ -318,23 +336,23 @@ static int psdisk_updatePartsList(ptable_partition_t *pHeaders, uint32_t pCnt)
 
 		switch (action) {
 			case part_save:
-				if ((newNode = (struct plist_node_t *)malloc(sizeof(struct plist_node_t))) == NULL) {
-					fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+				newNode = calloc(1, sizeof(*newNode));
+				if (newNode == NULL) {
+					fprintf(stderr, "Cannot allocate memory, err: %s.\n", strerror(errno));
 					return -1;
 				}
-				memcpy(&newNode->pHeader, &pHeaders[i], sizeof(ptable_partition_t));
+				newNode->part = ptable->parts[i];
 				newNode->status = part_save;
-
 				LIST_INSERT_HEAD(&psdisk_common.list, newNode, ptrs);
-				++psdisk_common.pCnt;
+				psdisk_common.count++;
 				break;
 
 			case part_remove:
-				tempNode = LIST_NEXT(pNode, ptrs);
-				LIST_REMOVE(pNode, ptrs);
-				free(pNode);
-				pNode = tempNode;
-				--psdisk_common.pCnt;
+				tempNode = LIST_NEXT(node, ptrs);
+				LIST_REMOVE(node, ptrs);
+				free(node);
+				node = tempNode;
+				psdisk_common.count--;
 				break;
 
 			case part_update:
@@ -345,10 +363,10 @@ static int psdisk_updatePartsList(ptable_partition_t *pHeaders, uint32_t pCnt)
 		}
 	}
 
-	/* Check whether user define correct partition to remove */
-	LIST_FOREACH(pNode, &psdisk_common.list, ptrs) {
-		if (pNode->status == part_remove) {
-			fprintf(stderr,"ERROR: cannot remove %s partition. It is not located in %s.\n", pNode->pHeader.name, psdisk_common.fileName);
+	/* Check whether user defined correct partition to remove */
+	LIST_FOREACH(node, &psdisk_common.list, ptrs) {
+		if (node->status == part_remove) {
+			fprintf(stderr, "ERROR: cannot remove %s partition. It is not located in %s.\n", node->part.name, psdisk_common.fileName);
 			return -1;
 		}
 	}
@@ -359,25 +377,24 @@ static int psdisk_updatePartsList(ptable_partition_t *pHeaders, uint32_t pCnt)
 
 static int psdisk_updateImg(void)
 {
-	uint32_t pCnt;
-	ptable_partition_t *pHeaders;
+	ptable_t *ptable;
+	int err;
 
-	if ((pHeaders = ptable_readPartitions(&pCnt, &psdisk_common.mem)) == NULL) {
-		fprintf(stderr,"The file contains incorrect partition table.\n");
+	ptable = psdisk_readImg();
+	if (ptable == NULL) {
+		fprintf(stderr, "The file contains incorrect partition table.\n");
 		return -1;
 	}
 
-	if (psdisk_updatePartsList(pHeaders, pCnt) < 0) {
-		free(pHeaders);
+	err = psdisk_updatePartsList(ptable);
+	free(ptable);
+	if (err < 0) {
 		return -1;
 	}
 
 	if (psdisk_createImg() < 0) {
-		free(pHeaders);
 		return -1;
 	}
-
-	free(pHeaders);
 
 	return 0;
 }
@@ -385,201 +402,129 @@ static int psdisk_updateImg(void)
 
 /* Parsing data from user */
 
-static int psdisk_parseToRm(void)
+static int psdisk_parseToRm(const char *arg)
 {
-	int i;
-	struct plist_node_t *pNode;
+	struct plist_node_t *node;
+	size_t len;
 
 	/* Parse partition name */
-	for (i = 0; i < strlen(optarg); ++i) {
-		if (!isalnum(optarg[i])) {
-			fprintf(stderr,"Invalid partition name - %s.\n", optarg);
-			return -1;
-		}
-	}
-
-	if ((pNode = (struct plist_node_t *)calloc(1, sizeof(struct plist_node_t))) == NULL) {
-		fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+	len = strnlen(arg, sizeof(node->part.name));
+	if ((len == 0) || (len >= sizeof(node->part.name))) {
+		fprintf(stderr, "Invalid partition name - %s.\n", arg);
 		return -1;
 	}
 
-	if (strlen(optarg) >= sizeof(pNode->pHeader.name)) {
-		fprintf(stderr,"Invalid partition name - %s.\n", optarg);
-		free(pNode);
+	node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		fprintf(stderr, "Cannot allocate memory, err: %s.\n", strerror(errno));
 		return -1;
 	}
-	else {
-		strncpy((char *)pNode->pHeader.name, optarg, sizeof(pNode->pHeader.name));
-	}
 
-	pNode->status = part_remove;
-
-	LIST_INSERT_HEAD(&psdisk_common.list, pNode, ptrs);
-	++psdisk_common.pCnt;
+	strcpy((char *)node->part.name, arg);
+	node->status = part_remove;
+	LIST_INSERT_HEAD(&psdisk_common.list, node, ptrs);
+	psdisk_common.count++;
 
 	return 0;
 }
 
 
-static int psdisk_parseToSave(void)
+static int psdisk_parseToSave(const char *arg)
 {
-	int i, ret = 0;
-	char *argsStr, *endptr;
-	const char *delimiter = ",";
-	struct plist_node_t *pNode = NULL;
+	struct plist_node_t *node;
+	const char *nptr;
+	char *endptr;
+	size_t len;
 
-	const int MAX_PARTITION_OPTS = 4;
-	char *opts[MAX_PARTITION_OPTS];
-
-	/* Get data from optarg and separete them */
-	if ((argsStr = (char *)malloc(strlen(optarg) + 1)) == NULL) {
-		fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+	node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		fprintf(stderr, "Cannot allocate memory, err: %s.\n", strerror(errno));
 		return -1;
 	}
 
-	do {
-		strcpy(argsStr, optarg);
-		if ((opts[0] = strtok(argsStr, delimiter)) == NULL) {
-			fprintf(stderr,"Invalid number of arguments.\n");
+	/* Parse partition name */
+	for (len = 0; len < sizeof(node->part.name); len++) {
+		if ((arg[len] == ',') || (arg[len] == '\0')) {
 			break;
 		}
+	}
 
-		for (i = 1; i < MAX_PARTITION_OPTS; ++i) {
-			if ((opts[i] = strtok(NULL, delimiter)) == NULL) {
-				fprintf(stderr,"Invalid number of arguments.\n");
-				ret = 1;
-				break;
-			}
-		}
+	if ((len == 0) || (len >= sizeof(node->part.name)) || (arg[len] != ',')) {
+		fprintf(stderr, "Invalid partition name - %s.\n", arg);
+		free(node);
+		return -1;
+	}
+	strncpy((char *)node->part.name, arg, len);
+	node->part.name[len] = '\0';
 
-		if (ret)
-			break;
-
-		if ((pNode = (struct plist_node_t *)calloc(1, sizeof(struct plist_node_t))) == NULL) {
-			fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
-			break;
-		}
-
-		/* Parse partition name */
-		for (i = 0; i < strlen(opts[0]); ++i) {
-			if (!isalnum(opts[0][i])) {
-				fprintf(stderr,"Invalid partition name - %s.\n", opts[0]);
-				ret = 1;
-				break;
-			}
-		}
-
-		if (ret)
-			break;
-
-		if (strlen(opts[0]) >= sizeof(pNode->pHeader.name)) {
-			fprintf(stderr,"Invalid partition name - %s.\n", opts[0]);
-			break;
-		}
-		else {
-			strncpy((char *)pNode->pHeader.name, opts[0], sizeof(pNode->pHeader.name));
-		}
-
-		if (((pNode->pHeader.offset = strtoul(opts[1], &endptr, 0)) == 0 && strlen(endptr) != 0) || (pNode->pHeader.offset != 0 && strlen(endptr) != 0)) {
-			fprintf(stderr,"Partition %s has invalid offset %s.\n", pNode->pHeader.name, endptr);
-			break;
-		}
-
-		if ((pNode->pHeader.size = strtoul(opts[2], &endptr, 0)) == 0 || strlen(endptr) != 0) {
-			fprintf(stderr,"Partition %s has invalid size %s.\n", pNode->pHeader.name, endptr);
-			break;
-		}
-
-		if ((pNode->pHeader.type = strtoul(opts[3], &endptr, 0)) == 0 || strlen(endptr) != 0) {
-			fprintf(stderr,"Partition %s has invalid type %s.\n", pNode->pHeader.name, endptr);
-			break;
-		}
-
-		pNode->status = part_save;
-
-		LIST_INSERT_HEAD(&psdisk_common.list, pNode, ptrs);
-		++psdisk_common.pCnt;
-
-		free(argsStr);
-		return 0;
-
-	} while(0);
-
-	free(pNode);
-	free(argsStr);
-
-	return -1;
-}
-
-
-static int psdisk_parseMem(void)
-{
-	char *argsStr, *endptr;
-	const char *delimiter = ",";
-
-	const int MAX_MEM_OPTS = 2;
-	char *opts[MAX_MEM_OPTS];
-
-	/* Get data from optarg and separete them */
-	if ((argsStr = malloc(strlen(optarg) + 1)) == NULL) {
-		fprintf(stderr,"Cannot allocate memory, err: %s.\n", strerror(errno));
+	/* Parse partition offset */
+	nptr = arg + len + 1;
+	node->part.offset = strtoul(nptr, &endptr, 0);
+	if ((endptr == nptr) || (*endptr != ',')) {
+		fprintf(stderr, "Invalid partition offset - %s.\n", arg);
+		free(node);
 		return -1;
 	}
 
-	strcpy(argsStr, optarg);
-	/* Separate arguments */
-	if ((opts[0] = strtok(argsStr, delimiter)) == NULL || (opts[1] = strtok(NULL, delimiter)) == NULL) {
-		fprintf(stderr,"Invalid number of arguments.\n");
-		free(argsStr);
+	/* Parse partition size */
+	nptr = endptr + 1;
+	node->part.size = strtoul(nptr, &endptr, 0);
+	if ((endptr == nptr) || (*endptr != ',')) {
+		fprintf(stderr, "Invalid partition size - %s.\n", arg);
+		free(node);
 		return -1;
 	}
 
-	if ((psdisk_common.mem.memSize = strtoul(opts[0], &endptr, 0)) == 0 || strlen(endptr) != 0) {
-		fprintf(stderr,"Invalid memory size.\n");
-		free(argsStr);
+	/* Parse partition type */
+	nptr = endptr + 1;
+	node->part.type = strtoul(nptr, &endptr, 0);
+	if ((endptr == nptr) || (*endptr != '\0')) {
+		fprintf(stderr, "Invalid partition type - %s.\n", arg);
+		free(node);
 		return -1;
 	}
 
-	if ((psdisk_common.mem.sectorSize = strtoul(opts[1], &endptr, 0)) == 0 || strlen(endptr) != 0) {
-		fprintf(stderr,"Invalid sector siz.\n");
-		free(argsStr);
-		return -1;
-	}
-
-	psdisk_common.mem.read = psdisk_readImg;
-	psdisk_common.mem.write = psdisk_writeImg;
-
-	free(argsStr);
+	node->status = part_save;
+	LIST_INSERT_HEAD(&psdisk_common.list, node, ptrs);
+	psdisk_common.count++;
 
 	return 0;
 }
 
 
-static int psdisk_openImg(char *argv[])
+static int psdisk_parseMem(const char *arg)
 {
-	const char* param;
+	const char *nptr;
+	char *endptr;
 
-	if ((psdisk_common.fileName = argv[1]) == NULL) {
-		fprintf(stderr,"Invalid file name.\n");
+	nptr = arg;
+	psdisk_common.memsz = strtoul(nptr, &endptr, 0);
+	if ((endptr == nptr) || (*endptr != ',')) {
+		fprintf(stderr, "Invalid memory size - %s.\n", arg);
 		return -1;
 	}
 
-	if (psdisk_common.fileName[0] == '-') {
-		fprintf(stderr,"First argument has to be a file name.\n");
+	nptr = endptr + 1;
+	psdisk_common.blksz = strtoul(nptr, &endptr, 0);
+	if ((endptr == nptr) || (*endptr != '\0')) {
+		fprintf(stderr, "Invalid block size - %s.\n", arg);
 		return -1;
 	}
 
-	/* Check whether file exists. */
-	if (access(psdisk_common.fileName, F_OK) == 0)
+	return 0;
+}
+
+
+static int psdisk_openImg(void)
+{
+	/* Check whether file exists */
+	if (access(psdisk_common.fileName, F_OK) == 0) {
 		psdisk_common.opts |= 1 << attr_fileExists;
+	}
 
-	if (FILE_EXIST(psdisk_common.opts))
-		param = "r+b";
-	else
-		param = "w+b";
-
-	if ((psdisk_common.file = fopen(psdisk_common.fileName, param)) == NULL) {
-		fprintf(stderr,"Cannot open file - %s, err: %s.\n", psdisk_common.fileName, strerror(errno));
+	psdisk_common.file = fopen(psdisk_common.fileName, FILE_EXIST(psdisk_common.opts) ? "r+b" : "w+b");
+	if (psdisk_common.file == NULL) {
+		fprintf(stderr, "Cannot open file - %s, err: %s.\n", psdisk_common.fileName, strerror(errno));
 		return -1;
 	}
 
@@ -592,53 +537,61 @@ static void psdisk_destroy(void)
 	struct plist_node_t *node;
 
 	while (!LIST_EMPTY(&psdisk_common.list)) {
-			node = LIST_FIRST(&psdisk_common.list);
-			LIST_REMOVE(node, ptrs);
-			free(node);
+		node = LIST_FIRST(&psdisk_common.list);
+		LIST_REMOVE(node, ptrs);
+		free(node);
 	}
 
-	if (psdisk_common.file != NULL)
+	if (psdisk_common.file != NULL) {
 		fclose(psdisk_common.file);
+	}
 }
 
 
 static int psdisk_handleImg(void)
 {
-	int res = -1;
+	int ret = -1;
 	int rmFile = 0;
 
 	if (CREATE_IMG(psdisk_common.opts)) {
-		if ((res = psdisk_createImg()) < 0) {
-			fprintf(stderr,"Cannot create file system image '%s'.\n", psdisk_common.fileName);
+		ret = psdisk_createImg();
+		if (ret < 0) {
+			fprintf(stderr, "Cannot create partition table image '%s'.\n", psdisk_common.fileName);
 			rmFile = 1;
 		}
 		else {
-			printf("File system image '%s' was created correctly.\n", psdisk_common.fileName);
+			printf("Partition table image '%s' was created successfully.\n", psdisk_common.fileName);
 		}
 	}
 	else if (UPDATE_IMG(psdisk_common.opts)) {
-		if ((res = psdisk_updateImg()) < 0)
-			fprintf(stderr,"Cannot update file system image '%s'.\n", psdisk_common.fileName);
-		else
-			printf("File system image '%s' was updated correctly.\n", psdisk_common.fileName);
-
+		ret = psdisk_updateImg();
+		if (ret < 0) {
+			fprintf(stderr, "Cannot update partition table image '%s'.\n", psdisk_common.fileName);
+		}
+		else {
+			printf("File system image '%s' was updated successfully.\n", psdisk_common.fileName);
+		}
 	}
 	else if (READ_IMG(psdisk_common.opts)) {
-		if ((res = psdisk_readPartsTable()) < 0)
-			fprintf(stderr,"Cannot read file system image '%s'.\n", psdisk_common.fileName);
-		else
+		ret = psdisk_readPartsTable();
+		if (ret < 0) {
+			fprintf(stderr, "Cannot read partition table image '%s'.\n", psdisk_common.fileName);
+		}
+		else {
 			psdisk_showPartsTable();
+		}
 	}
 	else {
-		fprintf(stderr,"Inappropriate option, read help.\n");
+		fprintf(stderr, "Inappropriate option, read help.\n");
 		rmFile = !FILE_EXIST(psdisk_common.opts);
 	}
 
 	psdisk_destroy();
-	if (rmFile)
+	if (rmFile != 0) {
 		remove(psdisk_common.fileName);
+	}
 
-	return res;
+	return ret;
 }
 
 
@@ -646,7 +599,7 @@ int main(int argc, char *argv[])
 {
 	int opt;
 
-	psdisk_common.pCnt = 0;
+	psdisk_common.count = 0;
 	psdisk_common.opts = 0;
 	LIST_INIT(&psdisk_common.list);
 
@@ -656,30 +609,37 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	/* First argument has to be an image path or help option. */
+	/* First argument has to be an image path or help option */
 	if (strcmp(argv[1], "-h") != 0) {
-		if (psdisk_openImg(argv) < 0)
+		if (argv[1][0] == '-') {
+			fprintf(stderr, "First argument has to be a file name.\n");
 			return -1;
+		}
+
+		psdisk_common.fileName = argv[1];
+		if (psdisk_openImg() < 0) {
+			return -1;
+		}
 	}
 
-	while ((opt = getopt(argc, argv, "r:m:p:ho")) != -1) {
+	while ((opt = getopt(argc, argv, "r:m:p:h")) != -1) {
 		switch (opt) {
 			case 'm':
 				if (!MEMORY_DECLARED(psdisk_common.opts)) {
-					if (psdisk_parseMem() < 0) {
+					if (psdisk_parseMem(optarg) < 0) {
 						psdisk_destroy();
 						return -1;
 					}
 					psdisk_common.opts |= 1 << attr_memDeclare;
 				}
 				else {
-					fprintf(stderr,"Only one memory declarion is possible.\n");
+					fprintf(stderr, "Only one memory declarion is possible.\n");
 					return -1;
 				}
 				break;
 
 			case 'p':
-				if (psdisk_parseToSave() < 0) {
+				if (psdisk_parseToSave(optarg) < 0) {
 					psdisk_destroy();
 					return -1;
 				}
@@ -687,29 +647,27 @@ int main(int argc, char *argv[])
 				break;
 
 			case 'r':
-				if (psdisk_parseToRm() < 0) {
+				if (psdisk_parseToRm(optarg) < 0) {
 					psdisk_destroy();
 					return -1;
 				}
 				psdisk_common.opts |= 1 << attr_partsRemove;
 				break;
 
-			case 'o':
-				psdisk_common.opts |= 1 << attr_ptableOffset;
-				break;
-
 			case 'h':
 				psdisk_printHelp(argv[0]);
 				psdisk_destroy();
-				if (!FILE_EXIST(psdisk_common.opts))
+				if (!FILE_EXIST(psdisk_common.opts)) {
 					remove(psdisk_common.fileName);
+				}
 				return 0;
 
 			default:
-				fprintf(stderr,"Unknown option: %c.\n", optopt);
+				fprintf(stderr, "Unknown option: %c.\n", optopt);
 				psdisk_destroy();
-				if (!FILE_EXIST(psdisk_common.opts))
+				if (!FILE_EXIST(psdisk_common.opts)) {
 					remove(psdisk_common.fileName);
+				}
 				return -1;
 		}
 	}
