@@ -74,11 +74,11 @@ int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data)
 			fprintf(stderr, "[%d] dispatch: Wrong speed port\n", getpid());
 			return ERR_DISPATCH_IO;
 		}
-		printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%d)\n", getpid(), dev_addr, baudrate);
 		if ((fd = serial_open(dev_addr, *(speed_t *)data)) < 0) {
 			fprintf(stderr, "[%d] dispatch: Can't open serial port '%s'\n", getpid(), dev_addr);
 			return ERR_DISPATCH_IO;
 		}
+		printf("[%d] dispatch: Starting message dispatcher on [%s] (speed=%d)\n", getpid(), dev_addr, baudrate);
 		msg_send = msg_serial_send;
 		msg_recv = msg_serial_recv;
 	}
