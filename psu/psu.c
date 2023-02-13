@@ -61,12 +61,12 @@ int usage(char *progname)
 }
 
 
-static inline void set_write_file_cmd(unsigned char *b, uint32_t addr, uint32_t size)
+static inline void set_write_file_cmd(unsigned char *b, uint32_t addr, uint8_t format, uint32_t size)
 {
 	SET_CMD_TYPE(b, 0x04);
 	SET_ADDR(b, addr);
 	SET_COUNT(b, size);
-	SET_FORMAT(b, 0x20);
+	SET_FORMAT(b, format);
 }
 
 
@@ -133,7 +133,7 @@ static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uin
 }
 
 
-static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size)
+static int sdp_writeFile(hid_device *dev, uint32_t addr, uint8_t format, void *data, size_t size)
 {
 	int rc;
 	size_t n;
@@ -143,7 +143,7 @@ static int sdp_writeFile(hid_device *dev, uint32_t addr, void *data, size_t size
 
 	/* Send write command */
 	b[0] = 1;
-	set_write_file_cmd(b + 1, addr, size);
+	set_write_file_cmd(b + 1, addr, format, size);
 
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
@@ -604,9 +604,8 @@ static int write_file_cmd(script_t *s)
 	int type, res;
 	script_blob_t str;
 	script_blob_t blob = SCRIPT_BLOB_EMPTY;
-	long int offset = 0, addr = 0, size = 0;
+	long int addr = 0, format = 0, offset = 0, size = 0;
 	hid_device *dev = *( hid_device **)s->arg;
-
 
 	if (!(s->next.str.end - s->next.str.ptr == 1 && (*s->next.str.ptr == 'F' || *s->next.str.ptr == 'S'))) {
 		s->errstr = "Type F or S expected";
@@ -623,14 +622,20 @@ static int write_file_cmd(script_t *s)
 
 	str = s->token.str;
 
-	if (script_expect_opt(s, script_tok_integer, "Optional <offset> value was expected") == SCRIPT_OK)
-		offset = s->token.num;
+	if (script_expect_opt(s, script_tok_integer, "Optional <address> value was expected") == SCRIPT_OK)
+		addr = s->token.num;
 
 	if (s->errstr)
 		return SCRIPT_ERROR;
 
-	if (script_expect_opt(s, script_tok_integer, "Optional <address> value was expected") == SCRIPT_OK)
-		addr = s->token.num;
+	if (script_expect_opt(s, script_tok_integer, "Optional <format> value was expected") == SCRIPT_OK)
+		format = s->token.num;
+
+	if (s->errstr)
+		return SCRIPT_ERROR;
+
+	if (script_expect_opt(s, script_tok_integer, "Optional <offset> value was expected") == SCRIPT_OK)
+		offset = s->token.num;
 
 	if (s->errstr)
 		return SCRIPT_ERROR;
@@ -657,7 +662,7 @@ static int write_file_cmd(script_t *s)
 	res = SCRIPT_ERROR;
 
 	if (dev)
-		res = sdp_writeFile(dev, addr, blob.ptr + offset, size);
+		res = sdp_writeFile(dev, addr, format, blob.ptr + offset, size);
 
 	close_buffer(type, &blob);
 

@@ -6,22 +6,22 @@ SDP script syntax:
 
   Description: Wait on HID device.
 
-- WRITE\_FILE `<F/S>` `<quoted string>` `[offset]` `[address]` `[size]`
+- WRITE\_FILE `<F/S>` `<quoted string>` `[address]` `[format]` `[offset]` `[size]`
   
   Description: Host sends file or data to HID device.
-  
+  Note: use `format=0` (default) for typical file transfer (skips bad blocks). `format=1` is used for direct write at specified `address` (if `address` points to a bad block the operation completes without error despite file not being transfered), e.g. used for writing multiple control block or partition table copies.
   Example:
 
   ```
-  WRITE_FILE F "phoenix-arm-imx6ull.img" 0 0xac000000 16384   # off=0 addr=0xac000000 size=16384
+  WRITE_FILE F "phoenix-kernel.img" 0xac000000 0 0 16384 # addr=0xac000000 format=0 off=0 size=16384
   ```
 
   ```
-  WRITE_FILE F "phoenix-arm-imx6ull.img" 16384 0xac000000     # off=16384 addr=0xac000000 size=<whole file>
+  WRITE_FILE F "phoenix-kernel.img" 0xac000000 0 16384   # addr=0xac000000 format=0 off=16384 size=<whole file>
   ```
 
   ```
-  WRITE_FILE S "\x00\x00\x00\x80\xff\xff\xff\x87\x00\x00\x00\x00\x00\x80\x3a\x49\x00\x00\x00\x00 Xpsd;/dev/flash0;/dev/flash1;/" 0 0x80000020 # off=0 addr=0x80000020 size=<whole file>
+  WRITE_FILE S "\x00\x00\x00\x80\xff\xff\xff\x87\x00\x00\x00\x00\x00\x80\x3a\x49\x00\x00\x00\x00 Xpsd;/dev/flash0;/dev/flash1;/" 0x80000020 0 0 # addr=0x80000020 format=0 off=0 size=<whole file>
   ```
   
 - WRITE\_REGISTER `<address>` `<value>` `<format 8/16/32>`
