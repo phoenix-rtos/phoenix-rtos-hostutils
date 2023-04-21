@@ -21,6 +21,13 @@
 #include <sys/stat.h>
 #include <sys/queue.h>
 
+/* le32toh() and  not defined on MacOS */
+#ifdef __APPLE__
+
+#include <libkern/OSByteOrder.h>
+#define le32toh(x) OSSwapLittleToHostInt32(x)
+
+#endif
 
 /* TODO: change access to ptable.h */
 #include "../../phoenix-rtos-corelibs/libptable/ptable.h"
