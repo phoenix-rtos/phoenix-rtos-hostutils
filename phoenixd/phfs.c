@@ -38,6 +38,7 @@ int phfs_open(int fd, msg_t *msg, char *sysdir)
 
 	f = ((flags & 0x1) == PHFS_RDONLY) ? O_RDONLY : O_RDWR;
 	f = ((flags & 0x2) == PHFS_CREATE) ? (f | O_CREAT) : f;
+
 	msg_settype(msg, MSG_OPEN);
 	msg_setlen(msg, sizeof(int));
 
@@ -78,7 +79,7 @@ int phfs_read(int fd, msg_t *msg, char *sysdir)
 	lseek(io->handle, io->pos, SEEK_SET);
 	io->len = read(io->handle, io->buff, io->len);
 
-	l =  io->len > 0 ? io->len : 0;
+	l = (io->len > 0) ? io->len : 0;
 	io->pos += l;
 
 	printf("[%d] phfs: MSG_READ ofd=%d, pos=%d, len=%d, ret=%d\n",
@@ -111,7 +112,7 @@ int phfs_write(int fd, msg_t *msg, char *sysdir)
 	printf("[%d] phfs: MSG_WRITE fd=%d, pos=%d, ret=%d\n",
 		getpid(), io->handle, io->pos, io->len);
 
-	l =  io->len > 0 ? io->len : 0;
+	l = (io->len > 0) ? io->len : 0;
 	io->pos += l;
 
 	msg_settype(msg, MSG_WRITE);
@@ -175,33 +176,33 @@ int phfs_stat(int fd, msg_t *msg, char *sysdir)
 	struct pho_stat stat_send, test;
 	struct stat st;
 
-	fstat(io->handle,&st);
+	fstat(io->handle, &st);
 
-	stat_send.st_dev=st.st_dev;
-	stat_send.st_ino=st.st_ino;
-	stat_send.st_mode=st.st_mode;
-	stat_send.st_nlink=st.st_nlink;
-	stat_send.st_uid=st.st_uid;
-	stat_send.st_gid=st.st_gid;
-	stat_send.st_rdev=st.st_rdev;
-	stat_send.st_size=st.st_size;
+	stat_send.st_dev = st.st_dev;
+	stat_send.st_ino = st.st_ino;
+	stat_send.st_mode = st.st_mode;
+	stat_send.st_nlink = st.st_nlink;
+	stat_send.st_uid = st.st_uid;
+	stat_send.st_gid = st.st_gid;
+	stat_send.st_rdev = st.st_rdev;
+	stat_send.st_size = st.st_size;
 
-	stat_send.st_atime_=st.st_atime;
-	stat_send.st_mtime_=st.st_mtime;
-	stat_send.st_ctime_=st.st_ctime;
-	stat_send.st_blksize=st.st_blksize;
-	stat_send.st_blocks=st.st_blocks;
+	stat_send.st_atime_ = st.st_atime;
+	stat_send.st_mtime_ = st.st_mtime;
+	stat_send.st_ctime_ = st.st_ctime;
+	stat_send.st_blksize = st.st_blksize;
+	stat_send.st_blocks = st.st_blocks;
 
-	memcpy(io->buff,&stat_send,sizeof(stat_send));
-	memcpy(&test, io->buff,sizeof(stat_send));
-	io->pos=0;
+	memcpy(io->buff, &stat_send, sizeof(stat_send));
+	memcpy(&test, io->buff, sizeof(stat_send));
+	io->pos = 0;
 	l = sizeof(stat_send);
 	msg->data[MSG_MAXLEN - 1] = 0;
-	io->len=l;
+	io->len = l;
 	msg_settype(msg, MSG_FSTAT);
-	msg_setlen(msg, l+hdrsz);
+	msg_setlen(msg, l + hdrsz);
 
-	printf("[%d] phfs: MSG_STAT id:%d  \n", getpid(),io->handle);
+	printf("[%d] phfs: MSG_STAT id:%d  \n", getpid(), io->handle);
 
 	if (msg_send(fd, msg, seq) < 0)
 		return ERR_PHFS_IO;
@@ -265,24 +266,24 @@ int phfs_handlemsg(int fd, msg_t *msg, char *sysdir)
 	int res = 0;
 
 	switch (msg_gettype(msg)) {
-	case MSG_OPEN:
-		res = phfs_open(fd, msg, sysdir);
-		break;
-	case MSG_READ:
-		res = phfs_read(fd, msg, sysdir);
-		break;
-	case MSG_WRITE:
-		res = phfs_write(fd, msg, sysdir);
-		break;
-	case MSG_CLOSE:
-		res = phfs_close(fd, msg, sysdir);
-		break;
-	case MSG_RESET:
-		res = phfs_reset(fd, msg, sysdir);
-		break;
-	case MSG_FSTAT:
-		res = phfs_stat(fd, msg, sysdir);
-		break;
+		case MSG_OPEN:
+			res = phfs_open(fd, msg, sysdir);
+			break;
+		case MSG_READ:
+			res = phfs_read(fd, msg, sysdir);
+			break;
+		case MSG_WRITE:
+			res = phfs_write(fd, msg, sysdir);
+			break;
+		case MSG_CLOSE:
+			res = phfs_close(fd, msg, sysdir);
+			break;
+		case MSG_RESET:
+			res = phfs_reset(fd, msg, sysdir);
+			break;
+		case MSG_FSTAT:
+			res = phfs_stat(fd, msg, sysdir);
+			break;
 	}
 	if (res < 0)
 		printf("[%d] phfs: msg error %d \n", getpid(), res);

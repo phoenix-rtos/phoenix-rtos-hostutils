@@ -46,13 +46,13 @@ typedef struct _msg_t {
 
 
 /* Macros for modifying message headers */
-#define msg_settype(m, t)  ((m)->type = ((m)->type & ~0xffff) | (t & 0xffff))
+#define msg_settype(m, t)  ((m)->type = ((m)->type & ~0xffff) | ((t) & 0xffff))
 #define msg_gettype(m)     ((m)->type & 0xffff)
 
 #define msg_setlen(m, l)   ((m)->type = ((m)->type & 0xffff) | ((l) << 16))
 #define msg_getlen(m)      ((m)->type >> 16)
 
-#define msg_setcsum(m, c)  ((m)->csum = ((m)->csum & ~0xffff) | (c & 0xffff))
+#define msg_setcsum(m, c)  ((m)->csum = ((m)->csum & ~0xffff) | ((c) & 0xffff))
 #define msg_getcsum(m)     ((m)->csum & 0xffff)
 
 #define msg_setseq(m, s)   ((m)->csum = ((m)->csum & 0xffff) | ((s) << 16))

@@ -34,8 +34,8 @@
 typedef struct _msg_phfsio_t {
 	u32 handle;
 	u32 pos;
-	u32 len;
-	u8  buff[MSG_MAXLEN - 3 * sizeof(u32)];
+	s32 len;
+	u8  buff[MSG_MAXLEN - (2u * sizeof(u32)) - sizeof(s32)];
 } msg_phfsio_t;
 
 
