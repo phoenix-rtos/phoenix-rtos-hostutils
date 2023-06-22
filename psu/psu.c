@@ -26,6 +26,8 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <getopt.h>
+#include <limits.h>
 
 #include "../common/hid.h"
 #include "../common/script.h"
@@ -52,12 +54,16 @@
 #define BUF_SIZE 1025
 #define INTERRUPT_SIZE 65
 
+static int usbWaitTime = 10;
 
-int usage(char *progname)
+
+void usage(const char *progname)
 {
-	printf("Usage: %s script_path\n", progname);
-
-	return -1;
+	printf(
+		"Usage: %s [OPTIONS] script_path\n"
+		"\t-t   set timeout for wait command (10 second default)\n"
+		"\t-h   display help\n",
+		progname);
 }
 
 
@@ -494,7 +500,7 @@ static int wait_cmd(script_t *s)
 	if (s->flags & SCRIPT_F_DRYRUN)
 		return SCRIPT_OK;
 
-	for (retries = 10; ; retries--) {
+	for (retries = usbWaitTime; ; retries--) {
 		fprintf(stderr, "Waiting (%02d sec) for USB hid device %04x:%04x.\r", retries, (int)vid, (int)pid);
 
 		sleep(1);
@@ -760,15 +766,48 @@ static const script_funct_t funcs[] = {
 
 int main(int argc, char *argv[])
 {
-	int res = -1;
+	long int tmp;
+	int opt, res = -1;
 	script_t script;
 	hid_device *dev = NULL;
+	char *ptr;
 
-	if (argc < 2)
-		return usage(argv[0]);
+	for (;;) {
+		opt = getopt(argc, argv, "ht:");
+		if (opt == -1) {
+			break;
+		}
 
-	if (script_load(&script, argv[1]) != SCRIPT_OK)
-		return -1;
+		switch (opt) {
+			case 'h':
+				usage(argv[0]);
+				return EXIT_SUCCESS;
+
+			case 't':
+				tmp = strtol(optarg, &ptr, 10);
+				if ((optarg == ptr) || (tmp < 0) || (tmp > INT_MAX)) {
+					fprintf(stderr, "Invalid timeout value\n");
+					usage(argv[0]);
+					return EXIT_FAILURE;
+				}
+				usbWaitTime = (int)tmp;
+				break;
+
+			default:
+				usage(argv[0]);
+				return EXIT_FAILURE;
+		}
+	}
+
+	if (argc - optind != 1) {
+		fprintf(stderr, "No input script\n");
+		usage(argv[0]);
+		return EXIT_FAILURE;
+	}
+
+	if (script_load(&script, argv[optind]) != SCRIPT_OK) {
+		return EXIT_FAILURE;
+	}
 
 	script_set_funcs(&script, funcs, &dev);
 
@@ -779,10 +818,10 @@ int main(int argc, char *argv[])
 	if (script_parse(&script, SCRIPT_F_DRYRUN) != SCRIPT_OK) {
 		script_close(&script);
 		fprintf(stderr, "Exiting due to error in script file.\n");
-		return -1;
+		return EXIT_FAILURE;
 	}
 
-	if (!hid_init()) {
+	if (hid_init() == 0) {
 		/* Interpret script, now things like memalloc, hid device comm. may fail */
 		res = script_parse(&script, SCRIPT_F_SHOWLINES);
 		hid_close(dev);
@@ -791,5 +830,5 @@ int main(int argc, char *argv[])
 
 	script_close(&script);
 
-	return res;
+	return res < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
