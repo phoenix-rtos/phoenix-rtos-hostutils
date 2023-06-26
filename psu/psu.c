@@ -785,7 +785,7 @@ int main(int argc, char *argv[])
 
 			case 't':
 				tmp = strtol(optarg, &ptr, 10);
-				if ((optarg == ptr) || (tmp < 0) || (tmp > INT_MAX)) {
+				if ((optarg == ptr) || (*ptr != '\0') || (tmp < 0) || (tmp > INT_MAX)) {
 					fprintf(stderr, "Invalid timeout value\n");
 					usage(argv[0]);
 					return EXIT_FAILURE;
