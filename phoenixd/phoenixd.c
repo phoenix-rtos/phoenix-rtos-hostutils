@@ -27,6 +27,7 @@
 #include "../common/serial.h"
 #include "bsp.h"
 #include "msg_udp.h"
+#include "msg_tcp.h"
 #include "dispatch.h"
 
 
@@ -87,7 +88,8 @@ void print_help(void)
 	fprintf(stderr, "usage: phoenixd [-1] [-k kernel] [-s bindir]\n"
 			"\t\t-p serial_device [ [-p serial_device] ... ]\n"
 			"\t\t-m pipe_file [ [-m pipe_file] ... ]\n"
-			"\t\t-i ip_addr:port [ [-i ip_addr:port] ... ]\n"
+			"\t\t-i udp_ip_addr:port [ [-i udp_ip_addr:port] ... ]\n"
+			"\t\t-t tcp_ip_addr:port [ [-t tcp_ip_addr:port] ... ]\n"
 			"\t\t-u load_addr[:jump_addr]\n");
 
 	fprintf(stderr, "\n"
@@ -167,7 +169,7 @@ int main(int argc, char *argv[])
 	}
 
 	while (1) {
-		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:b:", long_opts, &opt_idx);
+		c = getopt_long(argc, argv, "h1k:p:s:m:i:u:a:x:c:I:o:b:t:", long_opts, &opt_idx);
 		if (c < 0)
 			break;
 
@@ -206,6 +208,14 @@ int main(int argc, char *argv[])
 				break;
 			}
 			mode[i] = UDP;
+			ttys[i++] = optarg;
+			break;
+		case 't':
+			if (i >= 8) {
+				fprintf(stderr, "Too many instances (-t %s)\n", optarg);
+				break;
+			}
+			mode[i] = TCP;
 			ttys[i++] = optarg;
 			break;
 		case 'u':
@@ -291,19 +301,32 @@ int main(int argc, char *argv[])
 
 				res = usb_vybrid_dispatch(kernel,ttys[k], jumAddr, NULL, 0);
 			} else {
+				char *port;
 				unsigned speed_port = 0;
 
 				if (mode[k] == UDP) {
-					char *port;
-
-					if ((port = strchr(ttys[k], ':')) != NULL)
-					{
+					port = strchr(ttys[k], ':');
+					if (port != NULL) {
 						*port++ = '\0';
 						sscanf(port, "%u", &speed_port);
 					}
 
-					if (speed_port == 0 || speed_port > 0xffff)
-						speed_port = PHFS_DEFPORT;
+					if ((speed_port == 0) || (speed_port > 0xffff)) {
+						speed_port = PHFS_UDPPORT;
+					}
+
+					res = dispatch(ttys[k], mode[k], sysdir, (void *)&speed_port);
+				}
+				else if (mode[k] == TCP) {
+					port = strchr(ttys[k], ':');
+					if (port != NULL) {
+						*port++ = '\0';
+						sscanf(port, "%u", &speed_port);
+					}
+
+					if ((speed_port == 0) || (speed_port > 0xffff)) {
+						speed_port = PHFS_TCPPORT;
+					}
 
 					res = dispatch(ttys[k], mode[k], sysdir, (void *)&speed_port);
 				}

@@ -29,6 +29,7 @@
 
 #define ERR_MSG_IO     -48
 #define ERR_MSG_ARG    -49
+#define ERR_MSG_CLOSED -50
 
 #define ERR_SERIAL_OK       -64
 #define ERR_SERIAL_INIT     -65

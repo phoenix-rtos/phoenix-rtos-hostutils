@@ -27,6 +27,7 @@
 #include "dispatch.h"
 #include "phfs.h"
 #include "msg_udp.h"
+#include "msg_tcp.h"
 
 int (*msg_send)(int fd, msg_t *msg, u16 seq);
 int (*msg_recv)(int fd, msg_t *msg, int *state);
@@ -90,6 +91,16 @@ int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data)
 		msg_send = msg_udp_send;
 		msg_recv = msg_udp_recv;
 	}
+	else if (mode == TCP) {
+		fd = tcp_open(dev_addr, *(uint *)data);
+		if (fd < 0) {
+			fprintf(stderr, "[%d] dispatch: Can't open connection at '%s:%u'\n",
+				getpid(), dev_addr, *(uint *)data);
+			return ERR_DISPATCH_IO;
+		}
+		msg_send = msg_tcp_send;
+		msg_recv = msg_tcp_recv;
+	}
 	else if (mode == PIPE) {
 		dev_in = concat(dev_addr, ".out"); // because output from quemu is our input
 		dev_out = concat(dev_addr, ".in"); // same logic
@@ -104,8 +115,16 @@ int dispatch(char *dev_addr, dmode_t mode, char *sysdir, void *data)
 	}
 
 	for (state = MSGRECV_DESYN;;) {
-		if (msg_recv(fd, &msg, &state) < 0) {
-			fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n", getpid(), dev_addr, state);
+		err = msg_recv(fd, &msg, &state);
+		if (err < 0) {
+			if (err == ERR_MSG_CLOSED) {
+				fprintf(stderr, "[%d] dispatch: Connection closed by the remote end (%s:%u)\n",
+					getpid(), dev_addr, *(uint *)data);
+			}
+			else {
+				fprintf(stderr, "[%d] dispatch: Message receiving error on %s, state=%d!\n",
+					getpid(), dev_addr, state);
+			}
 			// if this is pipe - try to reconnect - it's because qemu closes pipe
 			if (mode == PIPE && --retries) {
 				usleep(100000);

@@ -24,6 +24,7 @@ typedef enum {
 	SERIAL,
 	PIPE,
 	UDP,
+	TCP,
 	USB_VYBRID,
 	USB_IMX
 } dmode_t;
