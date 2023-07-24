@@ -95,7 +95,7 @@ int udp_open(char *node, uint port)
 	result = bind(fd, (struct sockaddr *)&addr_in, sizeof(addr_in));
 
 	bcast_in.sin_addr.s_addr = bcast_addr(addr_in.sin_addr.s_addr);
-	bcast_in.sin_port = htons(PHFS_DEFPORT);
+	bcast_in.sin_port = htons(PHFS_UDPPORT);
 	bcast_in.sin_family = addr_in.sin_family;
 
 	if (result < 0)
