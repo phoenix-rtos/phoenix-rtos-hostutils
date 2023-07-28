@@ -21,15 +21,16 @@
 #include "msg.h"
 
 
-static u32 msg_csum(msg_t *msg)
+u32 msg_csum(msg_t *msg)
 {
 	unsigned int k;
 	u16 csum;
 
 	csum = 0;
 	for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
-		if (k >= sizeof(msg->csum))
+		if (k >= sizeof(msg->csum)) {
 			csum += *((u8 *)msg + k);
+		}
 	}
 	csum += msg_getseq(msg);
 	return csum;
