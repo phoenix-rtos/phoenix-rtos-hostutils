@@ -36,6 +36,9 @@ static struct sockaddr_in addr;
 static socklen_t addrlen;
 
 
+extern u32 msg_csum(msg_t *msg);
+
+
 in_addr_t bcast_addr(in_addr_t in_addr)
 {
 	struct ifaddrs *ifaddr, *ifa;
@@ -64,21 +67,6 @@ in_addr_t bcast_addr(in_addr_t in_addr)
 	}
 	freeifaddrs(ifaddr);
 	return in_bcast;
-}
-
-
-static u32 msg_csum(msg_t *msg)
-{
-	unsigned int k;
-	u16 csum;
-
-	csum = 0;
-	for (k = 0; k < MSG_HDRSZ + msg_getlen(msg); k++) {
-		if (k >= sizeof(msg->csum))
-			csum += *((u8 *)msg + k);
-	}
-	csum += msg_getseq(msg);
-	return csum;
 }
 
 
