@@ -374,17 +374,20 @@ static inline int8_t char_to_hex(char c)
 
 static int parse_byte_string(script_blob_t str, script_blob_t *blob)
 {
-	void *ptr = blob->ptr;
+	void *ptr;
 	int8_t bh, bl;
 
-	if (!(blob->ptr = realloc(ptr, str.end - str.ptr + 1 ))) {
+	ptr = realloc(blob->ptr, str.end - str.ptr + 1);
+	if (ptr == NULL) {
+		free(blob->ptr);
 		*blob = SCRIPT_BLOB_EMPTY;
-		free(ptr);
 
 		fprintf(stderr, "Unable to allocate memory.\n");
 
 		return SCRIPT_ERROR;
 	}
+
+	blob->ptr = ptr;
 
 	for (blob->end = blob->ptr; str.ptr < str.end; str.ptr++) {
 		if (*str.ptr != '\\') {
