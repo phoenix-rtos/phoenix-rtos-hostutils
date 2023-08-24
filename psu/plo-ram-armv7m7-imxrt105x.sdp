@@ -1,0 +1,13 @@
+# Wait for device
+WAIT 0x1fc9 0x0130
+ERROR_STATUS
+
+# Set FLEX RAM (order is important: 44,40)
+WRITE_REGISTER 0x400ac044 0xaaaabff5 32
+WRITE_REGISTER 0x400ac040 0x200007 32
+
+# Write plo to ITCM
+WRITE_FILE F "plo-ram.img" 0x100 0 0x100
+
+# Jump to ivt_addr and launch plo
+JUMP_ADDRESS 0x1050
