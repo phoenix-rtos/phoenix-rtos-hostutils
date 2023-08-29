@@ -20,7 +20,12 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <libgen.h>
+
+#ifdef __APPLE__
+#include <libelf/libelf.h>
+#else
 #include <elf.h>
+#endif
 
 #include "bswap.h"
 
