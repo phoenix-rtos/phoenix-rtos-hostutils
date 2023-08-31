@@ -29,7 +29,7 @@
 #include <hidapi/hidapi.h>
 
 
-#include "../phoenixd/dispatch.h"
+#include "hostutils-common/dispatch.h"
 
 #define SIZE_PAGE 0x1000
 #define SYSPAGESZ_MAX 0x400
@@ -653,6 +653,10 @@ int usb_imx_dispatch(char *kernel, char *console, char *initrd, char *append, in
 		len += strlen(append);
 
 	modules = malloc(len);
+	if (modules == NULL) {
+		printf("Failed to allocate `modules`. Exiting...\n");
+		return -1;
+	}
 	memset(modules, 0, len);
 	if (console != NULL) {
 		modules[0] = 'X';

@@ -29,8 +29,8 @@
 #include <getopt.h>
 #include <limits.h>
 
-#include "../common/hid.h"
-#include "../common/script.h"
+#include <hostutils-common/hid.h>
+#include <hostutils-common/script.h>
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 

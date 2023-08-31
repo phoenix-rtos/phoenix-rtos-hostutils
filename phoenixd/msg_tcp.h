@@ -16,7 +16,7 @@
 #ifndef _MSG_TCP_H_
 #define _MSG_TCP_H_
 
-#include "../common/types.h"
+#include <hostutils-common/types.h>
 #include "msg.h"
 
 #define PHFS_TCPPORT 18022

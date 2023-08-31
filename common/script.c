@@ -20,7 +20,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "script.h"
+#include "hostutils-common/script.h"
 
 #define LOG_ERROR(...)  fprintf(stderr, __VA_ARGS__)
 #define LOG(...)        fprintf(stdout, __VA_ARGS__)

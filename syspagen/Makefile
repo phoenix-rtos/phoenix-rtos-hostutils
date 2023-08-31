@@ -4,7 +4,8 @@
 # Copyright 2022 Phoenix Systems
 #
 
-$(PREFIX_PROG)syspagen: $(PREFIX_O)syspagen/syspagen.o
-	$(LINK)
+NAME := syspagen
+LOCAL_DIR := $(call my-dir)
+SRCS := $(wildcard $(LOCAL_DIR)*.c)
 
-all: $(PREFIX_PROG_STRIPPED)syspagen
+include $(binary.mk)

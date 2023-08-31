@@ -27,6 +27,8 @@
 
 #include <hidapi/hidapi.h>
 
+#include "hostutils-common/dispatch.h"
+
 /* SDP protocol section */
 #define SET_CMD_TYPE(b,v) (b)[0]=(b)[1]=(v)
 #define SET_ADDR(b,v) *((uint32_t*)((b)+2))=htonl(v)

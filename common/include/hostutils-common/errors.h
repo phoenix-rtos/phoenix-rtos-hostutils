@@ -1,6 +1,6 @@
 /*
  * Phoenix-RTOS
- * 
+ *
  * Phoenix server
  *
  * Error codes

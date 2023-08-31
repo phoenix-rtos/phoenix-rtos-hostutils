@@ -2,42 +2,34 @@
 # Makefile for phoenix-rtos-hostutils
 #
 # Copyright 2018-2021 Phoenix Systems
-# Copyright 2001 Pawel Pisarczyk
 #
 # %LICENSE%
 #
 
-SIL ?= @
-MAKEFLAGS += --no-print-directory
-
-TARGET := host-generic-pc
+# NOTE: currently host utils are being built with sanitizers enabled
+# - to disable either set NOSAN=1 env variable or uncomment the line below
+# NOSAN := 1
 
 include ../phoenix-rtos-build/Makefile.common
-include ../phoenix-rtos-build/Makefile.$(TARGET_SUFF)
 
+.DEFAULT_GOAL := all
+
+# provide common way for linking against hidapi for subcomponents
 ifeq ($(UNAME_S),Linux)
-	LDLIBS += -lhidapi-hidraw
+  HIDAPI_LIB := -lhidapi-hidraw
 else
-	LDLIBS += `pkg-config --libs hidapi`
+  HIDAPI_LIB := $(shell pkg-config --libs hidapi)
 endif
 
-.PHONY: clean
-clean:
-	@echo "rm -rf $(BUILD_DIR)"
+# read out all components
+ALL_MAKES := $(wildcard */Makefile)
+include $(ALL_MAKES)
 
-ifneq ($(filter clean,$(MAKECMDGOALS)),)
-	$(shell rm -rf $(BUILD_DIR))
-endif
+# build all tools by default
+DEFAULT_COMPONENTS := $(ALL_COMPONENTS)
 
-T1 := $(filter-out clean all,$(MAKECMDGOALS))
-ifneq ($(T1),)
-	include $(T1)/Makefile
-.PHONY: $(T1)
-$(T1): all
-else
-	include metaelf/Makefile
-	include phoenixd/Makefile
-	include psu/Makefile
-	include psdisk/Makefile
-	include syspagen/Makefile
-endif
+# create generic targets
+.PHONY: all install clean
+all: $(DEFAULT_COMPONENTS)
+install: $(patsubst %,%-install,$(DEFAULT_COMPONENTS))
+clean: $(patsubst %,%-clean,$(ALL_COMPONENTS))

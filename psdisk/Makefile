@@ -4,10 +4,9 @@
 # Copyright 2020 Phoenix Systems
 #
 
-# TODO: fix per project board_config.h visibility
-CFLAGS += -I$(PROJECT_PATH)/
+NAME := psdisk
+LOCAL_DIR := $(call my-dir)
+SRCS := $(wildcard $(LOCAL_DIR)*.c)
+LIBS := libptable
 
-$(PREFIX_PROG)psdisk: $(PREFIX_O)psdisk/psdisk.o $(PREFIX_O)../phoenix-rtos-corelibs/libptable/ptable.o
-	$(LINK)
-
-all: $(PREFIX_PROG_STRIPPED)psdisk
+include $(binary.mk)
