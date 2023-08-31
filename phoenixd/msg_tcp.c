@@ -20,7 +20,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include "../common/errors.h"
+#include <hostutils-common/errors.h>
 #include "msg_tcp.h"
 
 

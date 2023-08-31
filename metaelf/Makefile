@@ -1,10 +1,11 @@
 #
-# Makefile for Phoenix-RTOS syspagen
+# Makefile for Phoenix-RTOS metaelf
 #
 # Copyright 2022 Phoenix Systems
 #
 
-$(PREFIX_PROG)metaelf: $(addprefix $(PREFIX_O)metaelf/,crc32.o metaelf.o)
-	$(LINK)
+NAME := metaelf
+LOCAL_DIR := $(call my-dir)
+SRCS := $(wildcard $(LOCAL_DIR)*.c)
 
-all: $(PREFIX_PROG_STRIPPED)metaelf
+include $(binary.mk)

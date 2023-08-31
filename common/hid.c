@@ -12,7 +12,7 @@
  */
 
 
-#include "hid.h"
+#include "hostutils-common/hid.h"
 
 
 hid_device *open_device(uint16_t vid, uint16_t pid)

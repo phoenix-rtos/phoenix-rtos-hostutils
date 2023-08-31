@@ -17,8 +17,7 @@
 
 #include <stdio.h>
 
-#include "../common/types.h"
-
+#include <hostutils-common/types.h>
 
 typedef u16 Elf32_Half;
 typedef u32 Elf32_Word;

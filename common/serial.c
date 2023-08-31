@@ -18,9 +18,9 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "types.h"
-#include "errors.h"
-#include "serial.h"
+#include "hostutils-common/types.h"
+#include "hostutils-common/errors.h"
+#include "hostutils-common/serial.h"
 
 
 int serial_open(char *dev, speed_t speed)

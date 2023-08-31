@@ -22,8 +22,8 @@
 #include <sys/stat.h>
 #include <sys/resource.h>
 
-#include "../common/errors.h"
-#include "../phoenixd/dispatch.h"
+#include <hostutils-common/errors.h>
+#include "dispatch.h"
 #include "msg.h"
 #include "phfs.h"
 

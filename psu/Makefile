@@ -4,7 +4,10 @@
 # Copyright 2019 Phoenix Systems
 #
 
-$(PREFIX_PROG)psu: $(PREFIX_O)psu/psu.o $(addprefix $(PREFIX_O)common/,script.o serial.o hid.o) $(PREFIX_O)phoenixd/bsp.o
-	$(LINK)
+NAME := psu
+LOCAL_DIR := $(call my-dir)
+SRCS := $(wildcard $(LOCAL_DIR)*.c)
+DEP_LIBS := libhostutils-common
+LOCAL_LDLIBS := $(HIDAPI_LIB)
 
-all: $(PREFIX_PROG_STRIPPED)psu
+include $(binary.mk)

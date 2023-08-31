@@ -4,7 +4,10 @@
 # Copyright 2019 Phoenix Systems
 #
 
-$(PREFIX_PROG)phoenixd: $(addprefix $(PREFIX_O)phoenixd/,phoenixd.o bsp.o dispatch.o msg.o msg_udp.o msg_tcp.o phfs.o phoenixd.o) $(addprefix $(PREFIX_O)common/,serial.o usb_vybrid.o usb_imx.o)
-	$(LINK)
+NAME := phoenixd
+LOCAL_DIR := $(call my-dir)
+SRCS := $(wildcard $(LOCAL_DIR)*.c)
+DEP_LIBS := libhostutils-common
+LOCAL_LDLIBS := $(HIDAPI_LIB)
 
-all: $(PREFIX_PROG_STRIPPED)phoenixd
+include $(binary.mk)

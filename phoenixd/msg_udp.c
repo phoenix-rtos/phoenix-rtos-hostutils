@@ -25,8 +25,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include "../common/errors.h"
-#include "../common/types.h"
+#include <hostutils-common/errors.h>
 #include "msg_udp.h"
 #include "phfs.h"
 

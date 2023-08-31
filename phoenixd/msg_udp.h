@@ -16,7 +16,7 @@
 #ifndef _MSG_UDP_H_
 #define _MSG_UDP_H_
 
-#include "../common/types.h"
+#include <hostutils-common/types.h>
 #include "msg.h"
 
 #define PHFS_UDPPORT 11520
