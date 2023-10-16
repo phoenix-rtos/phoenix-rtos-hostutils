@@ -36,9 +36,16 @@
 
 /* SDP protocol section */
 #define SET_CMD_TYPE(b, v) (b)[0] = (b)[1] = (v)
-#define SET_ADDR(b, v) *((uint32_t *)((b) + 2)) = htonl(v)
-#define SET_COUNT(b, v) *((uint32_t *)((b) + 7)) = htonl(v);
-#define SET_DATA(b, v) *((uint32_t *)((b) + 11)) = htonl(v);
+#define _SET_UINT32(b, v, offs) \
+	do { \
+		(b)[offs + 0] = (v) >> 24; \
+		(b)[offs + 1] = (v) >> 16; \
+		(b)[offs + 2] = (v) >> 8; \
+		(b)[offs + 3] = (v)&0xFF; \
+	} while (0)
+#define SET_ADDR(b, v)   _SET_UINT32(b, v, 2)
+#define SET_COUNT(b, v)  _SET_UINT32(b, v, 7)
+#define SET_DATA(b, v)   _SET_UINT32(b, v, 11)
 #define SET_FORMAT(b, v) (b)[6] = (v);
 
 /* MCUBoot protocol */
