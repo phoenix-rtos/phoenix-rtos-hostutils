@@ -13,6 +13,10 @@
 
 #include <errno.h>
 #include <assert.h>
+#include <endian.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,17 +27,12 @@
 #include <libgen.h>
 
 
-/*
- * NOTE: this implementation currently is little endian only
- */
-
-
 #define LOG_prefix    "rofs: "
 #define LOG(fmt, ...) fprintf(stdout, LOG_prefix fmt "\n", ##__VA_ARGS__)
 #define ERR(fmt, ...) fprintf(stderr, LOG_prefix fmt "\n", ##__VA_ARGS__)
 
 
-#define ROFS_ALIGNUP(s, sz) (((s) + (sz)-1) & ~((sz)-1))
+#define ROFS_ALIGNUP(s, sz) (((s) + (sz) - 1) & ~((sz) - 1))
 
 #define ROFS_SIGNATURE     ((uint8_t[4]) { 'R', 'O', 'F', 'S' })
 #define ROFS_HDR_SIGNATURE 0
@@ -43,6 +42,10 @@
 #define ROFS_HDR_NODECOUNT 24
 #define ROFS_HEADER_SIZE   64
 
+enum endianness {
+	endian_little,
+	endian_big
+};
 
 struct rofs_node {
 	uint64_t timestamp;
@@ -71,6 +74,7 @@ static struct {
 	size_t nodesCount;
 	size_t depthMax;
 	size_t depth;
+	enum endianness endianness;
 } common = { 0 };
 
 
@@ -93,12 +97,15 @@ static inline time_t statTimeRecent(struct stat *st)
 static void calc_crc32mem(const uint8_t *buf, uint32_t len, uint32_t *crc)
 {
 #define CRC32POLY_LE 0xedb88320
+#define CRC32POLY_BE 0x04c11db7
 	uint32_t register rcrc = *crc;
 	int i;
+	uint32_t poly = (common.endianness == endian_little) ? CRC32POLY_LE : CRC32POLY_BE;
+
 	while (len--) {
 		rcrc = (rcrc ^ (*(buf++) & 0xff));
 		for (i = 0; i < 8; i++) {
-			rcrc = (rcrc >> 1) ^ ((rcrc & 1) ? CRC32POLY_LE : 0);
+			rcrc = (rcrc >> 1) ^ ((rcrc & 1) ? poly : 0);
 		}
 	}
 	*crc = rcrc;
@@ -129,6 +136,36 @@ static int calc_crc32file(FILE *img, size_t len, uint32_t *crc)
 }
 
 
+static void write_u32(uint8_t *buf, uint32_t value)
+{
+	uint32_t converted;
+
+	if (common.endianness == endian_little) {
+		converted = htole32(value);
+	}
+	else {
+		converted = htobe32(value);
+	}
+
+	memcpy(buf, &converted, sizeof(converted));
+}
+
+
+static void write_u64(uint8_t *buf, uint64_t value)
+{
+	uint64_t converted;
+
+	if (common.endianness == endian_little) {
+		converted = htole64(value);
+	}
+	else {
+		converted = htobe64(value);
+	}
+
+	memcpy(buf, &converted, sizeof(converted));
+}
+
+
 static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t nodeCnt)
 {
 	uint8_t hdr[ROFS_HEADER_SIZE];
@@ -138,9 +175,9 @@ static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t 
 
 	memset(hdr, 0, sizeof(hdr));
 	memcpy(&hdr[ROFS_HDR_SIGNATURE], ROFS_SIGNATURE, sizeof(ROFS_SIGNATURE));
-	memcpy(&hdr[ROFS_HDR_IMAGESIZE], &imgSize, sizeof(imgSize));
-	memcpy(&hdr[ROFS_HDR_INDEXOFFS], &idxOffs, sizeof(idxOffs));
-	memcpy(&hdr[ROFS_HDR_NODECOUNT], &nodeCnt, sizeof(nodeCnt));
+	write_u32(&hdr[ROFS_HDR_IMAGESIZE], imgSize);
+	write_u32(&hdr[ROFS_HDR_INDEXOFFS], idxOffs);
+	write_u32(&hdr[ROFS_HDR_NODECOUNT], nodeCnt);
 	calc_crc32mem(hdr + ROFS_HDR_IMAGESIZE, sizeof(hdr) - ROFS_HDR_IMAGESIZE, &crc);
 
 	do {
@@ -157,7 +194,7 @@ static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t 
 		}
 
 		crc = ~crc;
-		memcpy(&hdr[ROFS_HDR_CHECKSUM], &crc, sizeof(crc));
+		write_u32(&hdr[ROFS_HDR_CHECKSUM], crc);
 
 		if (fwrite(hdr, 1, sizeof(hdr), img) != sizeof(hdr)) {
 			break;
@@ -182,10 +219,16 @@ static void basestrncpy(char *dst, const char *src, size_t len)
 		exit(EXIT_FAILURE);
 	}
 	tmp = basename(strcpy((char *)common.buf, src));
-	if (strlen(tmp) >= len) {
+
+	size_t tmplen = strlen(tmp);
+	if (tmplen >= len) {
 		ERR("Name '%s' will be trimmed to %zu characters", tmp, len);
+		memcpy(dst, tmp, len);
 	}
-	strncpy(dst, tmp, len);
+	else {
+		memcpy(dst, tmp, tmplen);
+		memset(dst + tmplen, 0, len - tmplen);
+	}
 }
 
 struct rofs_node *node_alloc(void)
@@ -295,7 +338,14 @@ static int processDir(FILE *img, const char *path, uint32_t parentId, uint32_t *
 				break;
 			}
 
-			strncpy(node->name, entry->d_name, sizeof(node->name));
+			size_t entrylen = strlen(entry->d_name);
+			if (entrylen >= sizeof(node->name)) {
+				memcpy(node->name, entry->d_name, sizeof(node->name));
+			}
+			else {
+				memcpy(node->name, entry->d_name, entrylen);
+				memset(node->name + entrylen, 0, sizeof(node->name) - entrylen);
+			}
 			node->zero = '\0'; /* same: node->name[sizeof(node->name) + 1] = '\0'; */
 			node->id = file_id;
 			node->uid = st.st_uid;
@@ -337,11 +387,57 @@ static int processDir(FILE *img, const char *path, uint32_t parentId, uint32_t *
 }
 
 
+static void serialize_node(const struct rofs_node *node, uint8_t *buf)
+{
+	write_u64(buf, node->timestamp);
+	write_u32(buf + offsetof(struct rofs_node, parentId), node->parentId);
+	write_u32(buf + offsetof(struct rofs_node, id), node->id);
+	write_u32(buf + offsetof(struct rofs_node, mode), node->mode);
+	write_u32(buf + offsetof(struct rofs_node, reserved0), node->reserved0);
+	write_u32(buf + offsetof(struct rofs_node, uid), (uint32_t)node->uid);
+	write_u32(buf + offsetof(struct rofs_node, gid), (uint32_t)node->gid);
+	write_u32(buf + offsetof(struct rofs_node, offset), node->offset);
+	write_u32(buf + offsetof(struct rofs_node, reserved1), node->reserved1);
+	write_u32(buf + offsetof(struct rofs_node, size), node->size);
+	write_u32(buf + offsetof(struct rofs_node, reserved2), node->reserved2);
+	memcpy(buf + offsetof(struct rofs_node, name), node->name, sizeof(node->name));
+	*(buf + offsetof(struct rofs_node, zero)) = node->zero;
+}
+
+
+static int write_nodes_tree(FILE *img)
+{
+	uint8_t buf[256];
+	for (size_t i = 0; i < common.nodesCount; ++i) {
+		serialize_node(&common.nodes[i], buf);
+		if (fwrite(buf, 1, sizeof(buf), img) != sizeof(buf)) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+
+static void usage(const char *name)
+{
+	printf(
+		"Usage: %s [-p depth] [-l/-b] -d <dst> -s <src>\n"
+		"\tCreate Read-Only File System image\n"
+		"Arguments:\n"
+		"\t-p <depth> - Optional recursion MAX_DEPTH, default=128\n"
+		"\t-l         - Little endian FS, default\n"
+		"\t-b         - Big endian FS\n"
+		"\t-d <dst>   - Destination file system image file name (required)\n"
+		"\t-s <src>   - Source root directory to be placed into dst (required)\n",
+		name);
+}
+
+
 int main(int argc, char *argv[])
 {
 	FILE *img;
-	const char *rootDir;
-	const char *imgName;
+	const char *rootDir = NULL;
+	const char *imgName = NULL;
 
 	uint32_t indexOffset;
 	uint32_t fileSize;
@@ -349,35 +445,68 @@ int main(int argc, char *argv[])
 	uint32_t nextId = 0;
 	uint32_t currOffset = ROFS_HEADER_SIZE;
 
-	if ((argc < 3) || (argc > 4)) {
-		printf(
-			"Usage: %s <dst> <src> [dep]\n"
-			"\tCreate Read-Only File System image\n"
-			"Where:\n"
-			"\tdst - Destination file system image file name\n"
-			"\tsrc - Source root directory to be placed into dst\n"
-			"\tdep - Optional recursion MAX_DEPTH, default=128\n",
-			argv[0]);
-
-		return EXIT_FAILURE;
-	}
-
-	imgName = argv[1];
-	rootDir = argv[2];
-
 	common.nodes = NULL;
 	common.nodesAllocated = 0;
 	common.nodesCount = 0;
 	common.depthMax = 128;
 	common.depth = 0;
+	common.endianness = endian_little;
 
-	if (argc == 4) {
-		char *end;
-		common.depthMax = strtoul(argv[3], &end, 10);
-		if ((common.depthMax == 0) || (end[0] != '\0')) {
-			ERR("Invalid depth value = '%s'", argv[3]);
-			return EXIT_FAILURE;
+	int opt;
+	bool endianSet = false;
+	do {
+		opt = getopt(argc, argv, "p:d:s:lb");
+		switch (opt) {
+			case 'p': {
+				char *end;
+				errno = 0;
+				common.depthMax = strtoul(optarg, &end, 10);
+				if ((common.depthMax == 0) || (errno != 0) || (end[0] != '\0')) {
+					ERR("Invalid depth value = '%s'", optarg);
+					return EXIT_FAILURE;
+				}
+				break;
+			}
+
+			case 'l':
+				if (endianSet) {
+					ERR("Endianness already set");
+					return EXIT_FAILURE;
+				}
+				endianSet = true;
+				common.endianness = endian_little;
+				break;
+
+			case 'b':
+				if (endianSet) {
+					ERR("Endianness already set");
+					return EXIT_FAILURE;
+				}
+				endianSet = true;
+				common.endianness = endian_big;
+				break;
+
+			case 'd':
+				imgName = optarg;
+				break;
+
+			case 's':
+				rootDir = optarg;
+				break;
+
+			case -1:
+				break;
+
+			default:
+				usage(argv[0]);
+				return EXIT_FAILURE;
 		}
+	} while (opt != -1);
+
+	if ((imgName == NULL) || (rootDir == NULL)) {
+		ERR("Missing required arguments");
+		usage(argv[0]);
+		return EXIT_FAILURE;
 	}
 
 	LOG("recursion depth: %zu", common.depthMax);
@@ -410,7 +539,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Write nodes tree */
-		if (fwrite(common.nodes, sizeof(struct rofs_node), common.nodesCount, img) != common.nodesCount) {
+		if (write_nodes_tree(img) < 0) {
 			break;
 		}
 
