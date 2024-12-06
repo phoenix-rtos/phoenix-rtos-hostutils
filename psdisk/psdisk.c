@@ -79,24 +79,6 @@ struct {
 
 /* Information functions */
 
-static const char *psdisk_getTypeName(uint8_t type)
-{
-	switch (type) {
-		case ptable_raw:
-			return "raw";
-
-		case ptable_jffs2:
-			return "jffs2";
-
-		case ptable_meterfs:
-			return "meterfs";
-
-		default:
-			return "err";
-	}
-}
-
-
 static void psdisk_printHelp(const char *app)
 {
 	printf("\nUsage:");
@@ -110,15 +92,18 @@ static void psdisk_printHelp(const char *app)
 	printf(HELP_ALIGMENT, "   - h ", " ", "show help");
 	printf("\n");
 	printf("\nPartition types:\n");
-	printf("\t- meterfs = 0x75,\n");
-	printf("\t- jffs2 = 0x72,\n");
-	printf("\t- raw = 0x51.\n");
+
+	for (size_t i = 0; i < (sizeof(ptable_knownTypes) / sizeof(*ptable_knownTypes)); i++) {
+		printf("\t- %s = 0x%02x\n", ptable_typeName(ptable_knownTypes[i]), ptable_knownTypes[i]);
+	}
+
 	printf("\n\n");
 }
 
 
 static void psdisk_showPartsTable(void)
 {
+	const char *type;
 	struct plist_node_t *node;
 
 	fseek(psdisk_common.file, 0L, SEEK_END);
@@ -129,8 +114,9 @@ static void psdisk_showPartsTable(void)
 	printf("\n");
 	printf(BOLDWHITE PARTITION_HEADER_ALIGMENT RESET, "Name", "Start", "End", "Blocks", "Size", "Type");
 	LIST_FOREACH(node, &psdisk_common.list, ptrs) {
+		type = ptable_typeName(node->part.type);
 		printf(PARTITION_DATA_ALIGMENT, node->part.name, node->part.offset, node->part.offset + node->part.size,
-			   node->part.size / psdisk_common.blksz, node->part.size, psdisk_getTypeName(node->part.type));
+				node->part.size / psdisk_common.blksz, node->part.size, (type != NULL) ? type : "???");
 	}
 	printf("\n");
 }
@@ -487,6 +473,12 @@ static int psdisk_parseToSave(const char *arg)
 	node->part.type = strtoul(nptr, &endptr, 0);
 	if ((endptr == nptr) || (*endptr != '\0')) {
 		fprintf(stderr, "Invalid partition type - %s.\n", arg);
+		free(node);
+		return -1;
+	}
+
+	if (ptable_typeName(node->part.type) == NULL) {
+		fprintf(stderr, "Unknown partition type - %s.\n", arg);
 		free(node);
 		return -1;
 	}
