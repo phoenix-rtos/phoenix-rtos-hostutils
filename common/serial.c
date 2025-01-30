@@ -130,6 +130,50 @@ int serial_int2speed(int baudrate, speed_t *speed)
 		case 230400:    *speed = B230400; return 0;
 		case 460800:    *speed = B460800; return 0;
 #endif
+
+#ifdef B500000
+		case 500000: *speed = B500000; return 0;
+#endif
+
+#ifdef B576000
+		case 576000: *speed = B576000; return 0;
+#endif
+
+#ifdef B921600
+		case 921600: *speed = B921600; return 0;
+#endif
+
+#ifdef B1000000
+		case 1000000: *speed = B1000000; return 0;
+#endif
+
+#ifdef B1152000
+		case 1152000: *speed = B1152000; return 0;
+#endif
+
+#ifdef B1500000
+		case 1500000: *speed = B1500000; return 0;
+#endif
+
+#ifdef B2000000
+		case 2000000: *speed = B2000000; return 0;
+#endif
+
+#ifdef B2500000
+		case 2500000: *speed = B2500000; return 0;
+#endif
+
+#ifdef B3000000
+		case 3000000: *speed = B3000000; return 0;
+#endif
+
+#ifdef B3500000
+		case 3500000: *speed = B3500000; return 0;
+#endif
+
+#ifdef B4000000
+		case 4000000: *speed = B4000000; return 0;
+#endif
 	}
 
 	return -1;
@@ -156,6 +200,50 @@ int serial_speed2int(speed_t speed, int *baudrate)
 #else
 		case B230400:   *baudrate = 230400;  return 0;
 		case B460800:   *baudrate = 460800;  return 0;
+#endif
+
+#ifdef B500000
+		case B500000: *baudrate = 500000; return 0;
+#endif
+
+#ifdef B576000
+		case B576000: *baudrate = 576000; return 0;
+#endif
+
+#ifdef B921600
+		case B921600: *baudrate = 921600; return 0;
+#endif
+
+#ifdef B1000000
+		case B1000000: *baudrate = 1000000; return 0;
+#endif
+
+#ifdef B1152000
+		case B1152000: *baudrate = 1152000; return 0;
+#endif
+
+#ifdef B1500000
+		case B1500000: *baudrate = 1500000; return 0;
+#endif
+
+#ifdef B2000000
+		case B2000000: *baudrate = 2000000; return 0;
+#endif
+
+#ifdef B2500000
+		case B2500000: *baudrate = 2500000; return 0;
+#endif
+
+#ifdef B3000000
+		case B3000000: *baudrate = 3000000; return 0;
+#endif
+
+#ifdef B3500000
+		case B3500000: *baudrate = 3500000; return 0;
+#endif
+
+#ifdef B4000000
+		case B4000000: *baudrate = 4000000; return 0;
 #endif
 	}
 
