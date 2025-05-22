@@ -1,0 +1,4 @@
+proto
+perfetto_trace_pb2.py
+tmp
+__pycache__
