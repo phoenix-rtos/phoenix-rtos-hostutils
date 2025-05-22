@@ -1,0 +1,104 @@
+#!/bin/bash
+#
+# CTF event trace file trimmer. Sometimes the recorded trace contains partial
+# events at front and/or end, confusing babeltrace completely. This script
+# trims the file until babeltrace stops complaining
+#
+# Copyright 2025 Phoenix Systems
+# Author: Adam Greloch
+
+work_dir=$(mktemp -d -t "ctf_trim_XXXX")
+echo "created ${work_dir}"
+
+if [[ ! "${work_dir}" || ! -d "${work_dir}" ]]; then
+	echo "failed to create work dir"
+	exit 1
+fi
+
+function cleanup {
+	rm -rf "${work_dir}"
+	echo "deleted ${work_dir}"
+}
+
+trap cleanup EXIT
+
+# trim_event_stream(trace_dir_to_fix)
+trim_event_stream() {
+	MAX_ITERS=100
+
+	trace_dir_to_fix=${1?no input path}
+
+	trace_dir="${work_dir}/trace"
+	mkdir -p "${trace_dir}"
+
+	cp "${trace_dir_to_fix}/metadata" "${trace_dir}"
+
+	tmp_file="${work_dir}/tmp"
+
+	fix_event_channel() {
+		event_channel_name="${1?no event channel name}"
+
+		event_stream="${trace_dir}/${event_channel_name}"
+		tmp_event_stream="${work_dir}/${event_channel_name}_tmp"
+
+		cp "${trace_dir_to_fix}/${event_channel_name}" "${trace_dir}"
+
+		cat "${event_stream}" >"${tmp_event_stream}"
+		mv "${tmp_event_stream}" "${event_stream}"
+
+		ofs=0
+		iter=0
+
+		while :; do
+			if [ "${iter}" = "${MAX_ITERS}" ]; then
+				echo "trace is still bad after ${MAX_ITERS} iterations, aborting"
+				echo "last babeltrace2 complaint:"
+				babeltrace2 "${trace_dir}"
+				exit 1
+			fi
+
+			if [ "$(du -b "${event_stream}" | cut -f1)" = 0 ]; then
+				echo "empty file after ${iter} iterations, aborting"
+				exit 1
+			fi
+
+			if res=$(babeltrace2 "${trace_dir}" 2>/dev/null); then
+				if [ "${iter}" = "0" ]; then
+					echo "${event_channel_name} OK"
+				else
+					echo "${event_channel_name} FIXED: start=${ofs} len=$(du -b "${event_stream}" | cut -f1)"
+				fi
+				cp "${event_stream}" "${trace_dir_to_fix}/${event_channel_name}"
+				return
+			fi
+
+			if [ -n "${res}" ]; then
+				# trim at the end
+				head -c -1 "${event_stream}" >"${tmp_event_stream}"
+				mv "${tmp_event_stream}" "${event_stream}"
+			else
+				# trim at the beginning: remove two bytes, as first one is a context byte
+				# added by convert.sh and the second one is the real flawed byte
+				tail -c +3 "${event_stream}" >"${tmp_event_stream}"
+				mv "${tmp_event_stream}" "${event_stream}"
+
+				# reinsert context byte
+				cpu="${event_channel_name//[!0-9]/}"
+				# shellcheck disable=2059
+				{
+					printf "\x${cpu}"
+					cat "${event_stream}"
+				} >"${tmp_file}"
+				mv "${tmp_file}" "${event_stream}"
+
+				ofs=$((ofs + 1))
+			fi
+
+			iter=$((iter + 1))
+		done
+	}
+
+	for channel_path in "${trace_dir_to_fix}"/channel_event*; do
+		fix_event_channel "$(basename "${channel_path}")"
+	done
+}
