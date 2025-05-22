@@ -1,0 +1,129 @@
+#!/bin/bash
+#
+# CTF event trace file trimmer. Sometimes the recorded trace contains partial
+# events at front and/or end, confusing babeltrace completely. This script
+# trims the file until babeltrace stops complaining
+#
+# Copyright 2025 Phoenix Systems
+# Author: Adam Greloch
+
+work_dir=$(mktemp -d -t "ctf_trim_XXXX")
+echo "created ${work_dir}"
+
+if [[ ! "${work_dir}" || ! -d "${work_dir}" ]]; then
+	echo "failed to create work dir"
+	exit 1
+fi
+
+function cleanup {
+	rm -rf "${work_dir}"
+	echo "deleted ${work_dir}"
+}
+
+trap cleanup EXIT
+
+
+# trim_event_stream(trace_dir_to_fix)
+trim_event_stream() {
+	MAX_TRIM_ITERS=50 # should be more than max CTF packet size
+	MAX_START_TRIM_ITERS=l5
+
+	local trace_dir_to_fix="${1?no input path}"
+
+	trace_dir="${work_dir}/trace"
+	mkdir -p "${trace_dir}"
+
+	cp "${trace_dir_to_fix}/metadata" "${trace_dir}"
+
+	tmp_file="${work_dir}/tmp"
+
+	ofs=0
+	iter=0
+	trim_iter=0
+
+	trim_at_start() {
+		event_channel_name="${1?no event channel name}"
+
+		event_stream="${trace_dir}/${event_channel_name}"
+		tmp_event_stream="${work_dir}/${event_channel_name}_tmp"
+
+		# trim at the beginning: remove two bytes, as first one is a context byte
+		# added by convert.sh and the second one is the real flawed byte
+		tail -c +3 "${event_stream}" >"${tmp_event_stream}"
+		mv "${tmp_event_stream}" "${event_stream}"
+
+		# reinsert context byte
+		cpu="${event_channel_name//[!0-9]/}"
+		# shellcheck disable=2059
+		{
+			printf "\x${cpu}"
+			cat "${event_stream}"
+		} >"${tmp_file}"
+		mv "${tmp_file}" "${event_stream}"
+
+		ofs=$((ofs + 1))
+	}
+
+	fix_event_channel() {
+		event_channel_name="${1?no event channel name}"
+
+		event_stream="${trace_dir}/${event_channel_name}"
+		tmp_event_stream="${work_dir}/${event_channel_name}_tmp"
+
+		cp "${trace_dir_to_fix}/${event_channel_name}" "${trace_dir}"
+
+		cat "${event_stream}" >"${tmp_event_stream}"
+		mv "${tmp_event_stream}" "${event_stream}"
+
+		while :; do
+			if [ "${trim_iter}" = "${MAX_START_TRIM_ITERS}" ]; then
+				echo "trace is still bad after ${MAX_START_TRIM_ITERS} iterations, aborting"
+				echo "last babeltrace2 complaint:"
+				babeltrace2 "${trace_dir}"
+				exit 1
+			fi
+
+			if [ "${iter}" = "${MAX_TRIM_ITERS}" ]; then
+				# babeltrace may be lucky and parse some random bytes as one package
+				# despite wrong start offset, so its output will be nonempty. It
+				# won't succeed any further, so it will always fail on next packages and
+				# trimming the end of the trace won't help. We can trim the start
+				# again, as it is most likely incorrect
+				trim_at_start "${event_channel_name}"
+				iter=0
+				trim_iter=$((trim_iter + 1))
+			fi
+
+			if [ "$(du -b "${event_stream}" | cut -f1)" = 0 ]; then
+				echo "empty file after ${iter} iterations, aborting"
+				exit 1
+			fi
+
+			if res=$(babeltrace2 "${trace_dir}" 2>/dev/null); then
+				if [ "${iter}" = "0" ]; then
+					echo "${event_channel_name} OK"
+				else
+					echo "${event_channel_name} FIXED: start=${ofs} len=$(du -b "${event_stream}" | cut -f1)"
+				fi
+				cp "${event_stream}" "${trace_dir_to_fix}/${event_channel_name}"
+				return
+			fi
+
+			if [ -n "${res}" ]; then
+				# trim at the end
+				head -c -1 "${event_stream}" >"${tmp_event_stream}"
+				mv "${tmp_event_stream}" "${event_stream}"
+			else
+				trim_at_start "${event_channel_name}"
+			fi
+
+			iter=$((iter + 1))
+
+			echo -e "\e[1A\e[K${event_channel_name} trimming: start=${ofs} len=$(du -b "${event_stream}" | cut -f1)"
+		done
+	}
+
+	for channel_path in "${trace_dir_to_fix}"/channel_event*; do
+		fix_event_channel "$(basename "${channel_path}")"
+	done
+}
