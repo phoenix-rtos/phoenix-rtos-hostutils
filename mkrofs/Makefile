@@ -6,6 +6,7 @@
 
 NAME := mkrofs
 LOCAL_DIR := $(call my-dir)
+LIBS := libtinyaes
 SRCS := $(wildcard $(LOCAL_DIR)*.c)
 
 include $(binary.mk)
