@@ -29,53 +29,18 @@
 #include <tinyaes/aes.h>
 #include <tinyaes/cmac.h>
 
+#include <rofs_layout.h>
+
 #define LOG_prefix    "rofs: "
 #define LOG(fmt, ...) fprintf(stdout, LOG_prefix fmt "\n", ##__VA_ARGS__)
 #define ERR(fmt, ...) fprintf(stderr, LOG_prefix fmt "\n", ##__VA_ARGS__)
 
-
 #define ROFS_ALIGNUP(s, sz) (((s) + (sz) - 1) & ~((sz) - 1))
-
-#define ROFS_SIGNATURE      ((uint8_t[4]) { 'R', 'O', 'F', 'S' })
-#define ROFS_HDR_SIGNATURE  0
-#define ROFS_HDR_CHECKSUM   4
-#define ROFS_HDR_IMAGESIZE  8
-#define ROFS_HDR_INDEXOFFS  16
-#define ROFS_HDR_NODECOUNT  24
-#define ROFS_HDR_ENCRYPTION 32
-#define ROFS_HDR_CRYPT_SIG  34 /* let CRYPT_SIG to be at least 64-byte long to allow for future signatures schemes (e.g. ed25519) */
-#define ROFS_HEADER_SIZE    128
-
-_Static_assert(AES_BLOCKLEN <= ROFS_HEADER_SIZE - ROFS_HDR_CRYPT_SIG, "AES_MAC does not fit into the rofs header");
-
-/* clang-format off */
-enum { encryption_none, encryption_aes };
-/* clang-format on */
 
 enum endianness {
 	endian_little,
 	endian_big
 };
-
-struct rofs_node {
-	uint64_t timestamp;
-	uint32_t parentId;
-	uint32_t id;
-	uint32_t mode;
-	uint32_t reserved0;
-	int32_t uid;
-	int32_t gid;
-	uint32_t offset;
-	uint32_t reserved1;
-	uint32_t size;
-	uint32_t reserved2;
-	char name[207];
-	uint8_t zero; /* contains '\0' */
-} __attribute__((packed));
-
-
-_Static_assert(sizeof(struct rofs_node) == 256, "'struct rofs_node' needs to be 256 bytes");
-
 
 static struct {
 	uint8_t buf[4096];
@@ -222,7 +187,7 @@ static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t 
 	write_u32(&hdr[ROFS_HDR_IMAGESIZE], imgSize);
 	write_u32(&hdr[ROFS_HDR_INDEXOFFS], idxOffs);
 	write_u32(&hdr[ROFS_HDR_NODECOUNT], nodeCnt);
-	write_u32(&hdr[ROFS_HDR_ENCRYPTION], common.use_aes ? encryption_aes : encryption_none);
+	write_u32(&hdr[ROFS_HDR_ENCRYPTION], common.use_aes ? rofs_encryption_aes : rofs_encryption_none);
 
 	if (common.use_aes) {
 		if (fseek(img, sizeof(hdr), SEEK_SET) < 0) {
