@@ -219,7 +219,14 @@ static void basestrncpy(char *dst, const char *src, size_t len)
 		exit(EXIT_FAILURE);
 	}
 	tmp = basename(strcpy((char *)common.buf, src));
-
+	/*
+	 * NOTE: According to basename documentation and implementation, should never happen. Required due to GCC 15.2
+	 * See: https://github.com/phoenix-rtos/phoenix-rtos-project/issues/1477
+	 */
+	if (tmp == NULL) {
+		ERR("unexpected error");
+		exit(EXIT_FAILURE);
+	}
 	size_t tmplen = strlen(tmp);
 	if (tmplen >= len) {
 		ERR("Name '%s' will be trimmed to %zu characters", tmp, len);
