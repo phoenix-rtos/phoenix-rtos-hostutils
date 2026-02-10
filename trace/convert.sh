@@ -36,7 +36,8 @@ b_log() {
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 
-source "${SCRIPT_DIR}/trim_event_stream.subr"
+source "${SCRIPT_DIR}/utils/trim_event_stream.subr"
+source "${SCRIPT_DIR}/utils/utils.subr"
 
 set -e
 
@@ -100,9 +101,13 @@ if [ ! -f "${PROTO_FILE_PATH}" ]; then
 	protoc --proto_path="${PROTO_SRC}" --python_out="${PYTHON_SRC}" "${PROTO_FILE_PATH}"
 fi
 
+SYSCALL_NAMES_PATH="${SCRIPT_DIR}/syscall_names.txt"
+
+get_syscall_names > "${SYSCALL_NAMES_PATH}"
+
 b_log "converting using ${CTF_TO_PROTO}"
 
-time "${CTF_TO_PROTO}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}"
+time "${CTF_TO_PROTO}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}"
 
 echo "Resulting pftrace size: $(du -h "${OUTPUT_PFTRACE}" | cut -f 1)"
 

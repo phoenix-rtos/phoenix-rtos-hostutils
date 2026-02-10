@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# Tracing bash utilities
+#
+# Copyright 2026 Phoenix Systems
+# Author: Adam Greloch
+
+script_path="$(dirname "${BASH_SOURCE[0]}")"
+
+# get_syscall_names()
+#  Outputs a comma-separated list of syscall names based on p-r-kernel
+#  include/syscalls.h ordered by ID() occurrence.
+get_syscall_names() {
+  gcc -I"${script_path}/../../../phoenix-rtos-kernel/include/" -E -P "${script_path}/syscall_helper.c"
+}
