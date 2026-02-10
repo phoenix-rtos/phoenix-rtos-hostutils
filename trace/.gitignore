@@ -2,3 +2,4 @@ proto
 perfetto_trace_pb2.py
 tmp
 __pycache__
+syscall_names.txt

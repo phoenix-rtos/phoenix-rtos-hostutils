@@ -17,112 +17,6 @@ import perfetto_trace_pb2
 from perfetto_trace_pb2 import TrackEvent, CounterDescriptor
 
 
-prtos_syscalls = (
-    "debug",
-    "sys_mmap",
-    "sys_munmap",
-    "sys_fork",
-    "vforksvc",
-    "exec",
-    "spawnSyspage",
-    "sys_exit",
-    "sys_waitpid",
-    "threadJoin",
-    "getpid",
-    "getppid",
-    "gettid",
-    "beginthreadex",
-    "endthread",
-    "nsleep",
-    "phMutexCreate",
-    "phMutexLock",
-    "mutexTry",
-    "mutexUnlock",
-    "phCondCreate",
-    "phCondWait",
-    "condSignal",
-    "condBroadcast",
-    "resourceDestroy",
-    "interrupt",
-    "portCreate",
-    "portDestroy",
-    "portRegister",
-    "msgSend",
-    "msgRecv",
-    "msgRespond",
-    "lookup",
-    "gettime",
-    "settime",
-    "keepidle",
-    "platformctl",
-    "wdgreload",
-    "threadsinfo",
-    "meminfo",
-    "sys_perf_start",
-    "sys_perf_read",
-    "sys_perf_finish",
-    "sys_perf_stop",
-    "syspageprog",
-    "va2pa",
-    "signalHandle",
-    "signalPost",
-    "signalMask",
-    "signalSuspend",
-    "priority",
-    "sys_read",
-    "sys_write",
-    "sys_open",
-    "sys_close",
-    "sys_link",
-    "sys_unlink",
-    "sys_fcntl",
-    "sys_ftruncate",
-    "sys_lseek",
-    "sys_dup",
-    "sys_dup2",
-    "sys_pipe",
-    "sys_mkfifo",
-    "sys_chmod",
-    "sys_fstat",
-    "sys_fsync",
-    "sys_accept",
-    "sys_accept4",
-    "sys_bind",
-    "sys_connect",
-    "sys_gethostname",
-    "sys_getpeername",
-    "sys_getsockname",
-    "sys_getsockopt",
-    "sys_listen",
-    "sys_recvfrom",
-    "sys_sendto",
-    "sys_recvmsg",
-    "sys_sendmsg",
-    "sys_socket",
-    "sys_socketpair",
-    "sys_shutdown",
-    "sys_sethostname",
-    "sys_setsockopt",
-    "sys_ioctl",
-    "sys_futimens",
-    "sys_poll",
-    "sys_tkill",
-    "sys_setpgid",
-    "sys_getpgid",
-    "sys_setpgrp",
-    "sys_getpgrp",
-    "sys_setsid",
-    "sys_spawn",
-    "release",
-    "sbi_putchar",
-    "sbi_getchar",
-    "sigreturn",
-    "sys_mprotect",
-    "sys_statvfs",
-    "sys_uname",
-)
-
-
 class SyntheticEvents(Enum):
     INTERRUPT = "interrupt"
     IN_LOCK_SET = "lockSet"
@@ -237,7 +131,7 @@ class Emitter:
 
     warn_unknown_threads = False
 
-    def __init__(self):
+    def __init__(self, syscalls_path):
         for synthetic, (begin, end) in prtos_synthetic_events.items():
             self.synthetic_begin[begin] = []
             self.synthetic_end[end] = []
@@ -245,6 +139,9 @@ class Emitter:
         for synthetic, (begin, end) in prtos_synthetic_events.items():
             self.synthetic_begin[begin].append(synthetic)
             self.synthetic_end[end].append(synthetic)
+
+        with open(syscalls_path, "r") as f:
+            self.prtos_syscalls = tuple(s.strip() for s in f.read().split(","))
 
     @staticmethod
     def tid_or_kernel(event):
@@ -576,7 +473,7 @@ class Emitter:
         match name:
             case SyntheticEvents.SYSCALL:
                 n = args["n"]
-                event_name = "syscall:" + prtos_syscalls[n]
+                event_name = "syscall:" + self.prtos_syscalls[n]
             case SyntheticEvents.INTERRUPT:
                 irq = args["irq"]
                 event_name = f"irq:{irq}"
@@ -686,15 +583,16 @@ class Emitter:
 
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         sys.stderr.write(
-            "usage: " + sys.argv[0] + " [ctf path] [output path]\n")
+            "usage: " + sys.argv[0] + " [syscalls path] [ctf path] [output path]\n")
         sys.exit(1)
 
-    ctf_path = sys.argv[1]
-    output_path = sys.argv[2]
+    syscalls_path = sys.argv[1]
+    ctf_path = sys.argv[2]
+    output_path = sys.argv[3]
 
-    e = Emitter()
+    e = Emitter(syscalls_path)
 
     e.convert(ctf_path, output_path)
 
