@@ -54,7 +54,6 @@ prtos_syscalls = (
     "gettime",
     "settime",
     "keepidle",
-    "mmdump",
     "platformctl",
     "wdgreload",
     "threadsinfo",
