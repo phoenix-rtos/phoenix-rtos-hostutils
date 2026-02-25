@@ -14,7 +14,11 @@ import sys
 from enum import Enum
 
 import perfetto_trace_pb2
-from perfetto_trace_pb2 import TrackEvent, CounterDescriptor
+from perfetto_trace_pb2 import TrackEvent, DebugAnnotation
+
+from typing import Generator, Any
+
+from argparse import ArgumentParser
 
 
 class SyntheticEvents(Enum):
@@ -131,7 +135,7 @@ class Emitter:
 
     warn_unknown_threads = False
 
-    def __init__(self, syscalls_path):
+    def __init__(self, syscalls_path, add_debug_annotations=False):
         for synthetic, (begin, end) in prtos_synthetic_events.items():
             self.synthetic_begin[begin] = []
             self.synthetic_end[end] = []
@@ -142,6 +146,10 @@ class Emitter:
 
         with open(syscalls_path, "r") as f:
             self.prtos_syscalls = tuple(s.strip() for s in f.read().split(","))
+
+        self.add_debug_annotations = add_debug_annotations
+        if self.add_debug_annotations:
+            eprint("debug annotations enabled")
 
     @staticmethod
     def tid_or_kernel(event):
@@ -383,6 +391,7 @@ class Emitter:
 
             packet.timestamp = self.event_us(msg)
             packet.track_event.type = TrackEvent.Type.TYPE_SLICE_END
+            packet.track_event.flow_ids.clear()
 
             packets.append(packet)
 
@@ -433,6 +442,25 @@ class Emitter:
             self.warn_unknown_threads = True
         return self.threads[tid]
 
+    def read_args_to_debug_annotations(self, args: dict[str, Any]) -> Generator[DebugAnnotation]:
+        for k, v in args.items():
+            ann = DebugAnnotation()
+            ann.name = k
+            v = lower(v)
+            if isinstance(v, bool):
+                ann.bool_value = v
+            elif isinstance(v, int):
+                ann.int_value = v
+            elif isinstance(v, float):
+                ann.double_value = v
+            elif isinstance(v, str):
+                ann.string_value = v
+            else:
+                eprint(f"WARN: unhandled annotation type: {v.__class__} - added as '?'")
+                ann.string_value = "?"
+            yield ann
+
+
     def emit_event(
         self,
         msg: bt2._EventMessageConst,
@@ -454,8 +482,29 @@ class Emitter:
         shift_by_ns = False
 
         if name == "thread_create":
-            self.threads[tid] = {'pid': args['pid'], 'name': args['name'], 'prio':
-                                 args['prio'], 'ts': ts}
+            recurring = tid in self.threads
+            old_name = ""
+
+            if recurring:
+                old_name = self.threads[tid]["name"]
+
+            self.threads[tid] = {
+                "pid": args["pid"],
+                "name": args["name"],
+                "prio": args["prio"],
+                "ts": ts,
+            }
+
+            if recurring:
+                pid = args["pid"]
+                name = lower(args["name"])
+                eprint(f"rename process: '{old_name}' -> '{name}' {pid=}")
+                packet = perfetto_trace_pb2.TracePacket()
+                packet.track_descriptor.uuid = self.pid_to_uid[pid]
+                packet.track_descriptor.process.pid = pid
+                packet.track_descriptor.process.process_name = f"'{name}'"
+                self.print_trace_packets([packet])
+
             return  # meta event
 
         if tid != KERNEL_TID and tid not in self.tid_emitted:
@@ -483,8 +532,9 @@ class Emitter:
             case SyntheticEvents.LOCKED:
                 lock_name = self.get_lock_name(msg)
                 event_name = "locked:" + lock_name
-                flow_id = int(args["lid"])
                 if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
+                    flow_id = int(args["lid"])
+
                     # WORKAROUND: perfetto doesn't like IN_LOCK_SET END
                     # having the same ts as LOCKED BEGIN, resulting in
                     # LOCKED event not showing up on the timeline
@@ -520,6 +570,8 @@ class Emitter:
         packet.track_event.type = phase
         packet.track_event.name = event_name
         packet.track_event.track_uuid = track_uuid
+        if self.add_debug_annotations:
+            packet.track_event.debug_annotations.extend(self.read_args_to_debug_annotations(args))
         packet.trusted_packet_sequence_id = PACKET_SEQ
 
         if flow_id:
@@ -583,18 +635,19 @@ class Emitter:
 
 
 def main():
-    if len(sys.argv) < 4:
-        sys.stderr.write(
-            "usage: " + sys.argv[0] + " [syscalls path] [ctf path] [output path]\n")
-        sys.exit(1)
+    parser = ArgumentParser()
+    parser.add_argument("syscalls_path", help="path to list of syscalls")
+    parser.add_argument("ctf_path", help="path to CTF folder to convert")
+    parser.add_argument("output_path", help="path where to save the conversion result")
+    parser.add_argument("--add-debug-annotations", action="store_true", help="adds debug annotations to events (may slow down the conversion)")
 
-    syscalls_path = sys.argv[1]
-    ctf_path = sys.argv[2]
-    output_path = sys.argv[3]
+    if len(sys.argv) == 1:
+        parser.print_help()
+    args = parser.parse_args(sys.argv[1:])
 
-    e = Emitter(syscalls_path)
+    e = Emitter(args.syscalls_path, args.add_debug_annotations)
 
-    e.convert(ctf_path, output_path)
+    e.convert(args.ctf_path, args.output_path)
 
 
 if __name__ == "__main__":
