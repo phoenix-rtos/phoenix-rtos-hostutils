@@ -32,7 +32,7 @@ OPT="${5}"
 
 b_log "gathering trace from disk image"
 
-loop_dev="$(udisksctl loop-setup -f "${DISK_PATH}" -o $((4096 * 512)) | awk 'NF{ print $NF }' | sed 's/\.//g')"
+loop_dev="$(udisksctl loop-setup -f "${DISK_PATH}" -o "$(./get_rootfs_offset.sh "${DISK_PATH}")" | awk 'NF{ print $NF }' | sed 's/\.//g')"
 mounted_rootfs_path="$(udisksctl mount -b "${loop_dev}" | awk 'NF{ print $NF }' | sed 's/\.//g')"
 
 echo "${DISK_PATH} mounted to ${mounted_rootfs_path} (loop_dev=${loop_dev})"
