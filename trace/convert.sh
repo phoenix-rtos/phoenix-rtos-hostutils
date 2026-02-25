@@ -44,14 +44,9 @@ set -e
 CTF_DIR_PATH="${1?No ctf dir path given}"
 METADATA_FILE_PATH="${2?No metadata path given}"
 OUTPUT_PFTRACE="${3?No output given}"
-OPT="${4}"
 
 TMP_DIR="${SCRIPT_DIR}/tmp"
 TRACE_DIR="${TMP_DIR}/ctf-trace-$(date +%FT%T)"
-
-TRACE_PROCESSOR_URL="https://get.perfetto.dev/trace_processor"
-TRACE_PROCESSOR_PATH="${TMP_DIR}/trace_processor"
-PERFETTO_URL="https://ui.perfetto.dev/v50.1-2c4d2ffa7/"
 
 b_log "copying CTF data streams"
 
@@ -110,26 +105,3 @@ b_log "converting using ${CTF_TO_PROTO}"
 time "${CTF_TO_PROTO}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}"
 
 echo "Resulting pftrace size: $(du -h "${OUTPUT_PFTRACE}" | cut -f 1)"
-
-if [ "${OPT}" == "-t" ]; then
-	b_log "running trace processor"
-
-	if [ ! -f "${TRACE_PROCESSOR_PATH}" ]; then
-		echo "trace processor not found"
-		trace_processor_dir="$(dirname "${TRACE_PROCESSOR_PATH}")"
-		mkdir -p "${trace_processor_dir}"
-		(cd "${trace_processor_dir}" && curl -LO "${TRACE_PROCESSOR_URL}")
-		chmod +x "${TRACE_PROCESSOR_PATH}"
-	fi
-
-	echo "Opening ${PERFETTO_URL} in browser"
-	if [[ $(type -P "google-chrome") ]]; then
-		google-chrome "${PERFETTO_URL}" 2>/dev/null &
-	else
-		xdg-open "${PERFETTO_URL}" 2>/dev/null &
-	fi
-
-	echo "Press 'YES, use loaded trace' in the perfetto popup when asked"
-
-	exec "${TRACE_PROCESSOR_PATH}" --httpd "${OUTPUT_PFTRACE}" 2>/dev/null
-fi
