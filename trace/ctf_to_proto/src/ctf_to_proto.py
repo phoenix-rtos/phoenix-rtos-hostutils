@@ -383,6 +383,7 @@ class Emitter:
 
             packet.timestamp = self.event_us(msg)
             packet.track_event.type = TrackEvent.Type.TYPE_SLICE_END
+            packet.track_event.flow_ids.clear()
 
             packets.append(packet)
 
@@ -483,8 +484,9 @@ class Emitter:
             case SyntheticEvents.LOCKED:
                 lock_name = self.get_lock_name(msg)
                 event_name = "locked:" + lock_name
-                flow_id = int(args["lid"])
                 if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
+                    flow_id = int(args["lid"])
+
                     # WORKAROUND: perfetto doesn't like IN_LOCK_SET END
                     # having the same ts as LOCKED BEGIN, resulting in
                     # LOCKED event not showing up on the timeline
