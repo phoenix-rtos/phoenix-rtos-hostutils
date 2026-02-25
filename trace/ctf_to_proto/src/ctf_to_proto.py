@@ -14,7 +14,9 @@ import sys
 from enum import Enum
 
 import perfetto_trace_pb2
-from perfetto_trace_pb2 import TrackEvent, CounterDescriptor
+from perfetto_trace_pb2 import TrackEvent
+
+from argparse import ArgumentParser
 
 
 class SyntheticEvents(Enum):
@@ -606,18 +608,18 @@ class Emitter:
 
 
 def main():
-    if len(sys.argv) < 4:
-        sys.stderr.write(
-            "usage: " + sys.argv[0] + " [syscalls path] [ctf path] [output path]\n")
-        sys.exit(1)
+    parser = ArgumentParser()
+    parser.add_argument("syscalls_path", help="path to list of syscalls")
+    parser.add_argument("ctf_path", help="path to CTF folder to convert")
+    parser.add_argument("output_path", help="path where to save the conversion result")
 
-    syscalls_path = sys.argv[1]
-    ctf_path = sys.argv[2]
-    output_path = sys.argv[3]
+    if len(sys.argv) == 1:
+        parser.print_help()
+    args = parser.parse_args(sys.argv[1:])
 
-    e = Emitter(syscalls_path)
+    e = Emitter(args.syscalls_path)
 
-    e.convert(ctf_path, output_path)
+    e.convert(args.ctf_path, args.output_path)
 
 
 if __name__ == "__main__":

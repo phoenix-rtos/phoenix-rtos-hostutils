@@ -102,6 +102,7 @@ get_syscall_names > "${SYSCALL_NAMES_PATH}"
 
 b_log "converting using ${CTF_TO_PROTO}"
 
-time "${CTF_TO_PROTO}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}"
+# shellcheck disable=2068
+time "${CTF_TO_PROTO}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}" ${@:4}
 
 echo "Resulting pftrace size: $(du -h "${OUTPUT_PFTRACE}" | cut -f 1)"
