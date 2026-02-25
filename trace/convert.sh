@@ -5,18 +5,22 @@
 # Requires: babeltrace2 python3-bt2 protobuf-compiler python3-protobuf
 #
 # Usage: ./convert.sh CTF_DIR_PATH METADATA_PATH OUTPUT [OPTIONS]
-# Options:
-#		-t - run perfetto in browser with local trace processing acceleration (may
-#		be useful for large traces)
+#
+# Options are passed to ctf_to_proto (see: `python3 ctf_to_proto -h`).
 #
 # Copyright 2025 Phoenix Systems
 # Author: Adam Greloch
 
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+CTF_TO_PROTO_DIR="${SCRIPT_DIR}/ctf_to_proto/"
+
 if [ "$#" -eq 0 ]; then
 	echo "Usage: ./$(basename "$0") CTF_DIR_PATH METADATA_PATH OUTPUT [OPTIONS]"
-	echo "Options:"
-	echo "  -t:  run perfetto in browser with local trace processing acceleration (may be useful for large traces)"
+	echo ""
 	echo "Example: ./$(basename "$0") my-ctf-trace ../../phoenix-rtos-kernel/perf/tsdl/metadata output.pftrace"
+	echo ""
+	echo "OPTIONS can be used to pass ctf_to_proto options:"
+	python3 "${CTF_TO_PROTO_DIR}" -h
 	exit 1
 fi
 
@@ -33,8 +37,6 @@ fi
 b_log() {
 	echo -e "\033[1;33m$1\033[0m"
 }
-
-SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 
 source "${SCRIPT_DIR}/utils/trim_event_stream.subr"
 source "${SCRIPT_DIR}/utils/utils.subr"
@@ -79,10 +81,7 @@ b_log "trimming event streams"
 
 trim_event_stream "${TRACE_DIR}"
 
-CTF_TO_PROTO_DIR="${SCRIPT_DIR}/ctf_to_proto/"
 PYTHON_SRC="${CTF_TO_PROTO_DIR}/src"
-
-CTF_TO_PROTO="${PYTHON_SRC}/ctf_to_proto.py"
 
 PROTO_SRC="${CTF_TO_PROTO_DIR}/proto"
 PROTO_FILE_PATH="${PROTO_SRC}/perfetto_trace.proto"
@@ -102,6 +101,7 @@ get_syscall_names > "${SYSCALL_NAMES_PATH}"
 
 b_log "converting using ${CTF_TO_PROTO}"
 
-time "${CTF_TO_PROTO}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}"
+# shellcheck disable=2068
+time python3 "${CTF_TO_PROTO_DIR}" "${SYSCALL_NAMES_PATH}" "${TRACE_DIR}" "${OUTPUT_PFTRACE}" ${@:4}
 
 echo "Resulting pftrace size: $(du -h "${OUTPUT_PFTRACE}" | cut -f 1)"

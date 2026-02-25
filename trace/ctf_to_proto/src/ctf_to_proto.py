@@ -13,8 +13,8 @@ import bt2
 import sys
 from enum import Enum
 
-import perfetto_trace_pb2
-from perfetto_trace_pb2 import TrackEvent, CounterDescriptor
+from . import perfetto_trace_pb2
+from .perfetto_trace_pb2 import TrackEvent
 
 
 class SyntheticEvents(Enum):
@@ -607,21 +607,3 @@ class Emitter:
             eprint(
                 "WARN: there were threads missing metadata - they will be marked as UNKNOWN")
 
-
-def main():
-    if len(sys.argv) < 4:
-        sys.stderr.write(
-            "usage: " + sys.argv[0] + " [syscalls path] [ctf path] [output path]\n")
-        sys.exit(1)
-
-    syscalls_path = sys.argv[1]
-    ctf_path = sys.argv[2]
-    output_path = sys.argv[3]
-
-    e = Emitter(syscalls_path)
-
-    e.convert(ctf_path, output_path)
-
-
-if __name__ == "__main__":
-    main()
