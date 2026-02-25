@@ -455,8 +455,29 @@ class Emitter:
         shift_by_ns = False
 
         if name == "thread_create":
-            self.threads[tid] = {'pid': args['pid'], 'name': args['name'], 'prio':
-                                 args['prio'], 'ts': ts}
+            recurring = tid in self.threads
+            old_name = ""
+
+            if recurring:
+                old_name = self.threads[tid]["name"]
+
+            self.threads[tid] = {
+                "pid": args["pid"],
+                "name": args["name"],
+                "prio": args["prio"],
+                "ts": ts,
+            }
+
+            if recurring:
+                pid = args["pid"]
+                name = lower(args["name"])
+                eprint(f"rename process: '{old_name}' -> '{name}' {pid=}")
+                packet = perfetto_trace_pb2.TracePacket()
+                packet.track_descriptor.uuid = self.pid_to_uid[pid]
+                packet.track_descriptor.process.pid = pid
+                packet.track_descriptor.process.process_name = f"'{name}'"
+                self.print_trace_packets([packet])
+
             return  # meta event
 
         if tid != KERNEL_TID and tid not in self.tid_emitted:
