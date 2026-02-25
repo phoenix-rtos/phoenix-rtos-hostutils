@@ -2,21 +2,24 @@
 #
 # Utility script for converting CTF trace to perfetto protobuf from ia32-generic-qemu image
 #
-# Usage: ./ia32_convert.sh DISK_IMG_PATH ROOTFS_CTF_DIR_PATH METADATA_PATH OUTPUT [OPTIONS]
-# Options:
-#		-t - run perfetto in browser with local trace processing acceleration (may
-#		be useful for large traces)
+# Usage: ./rootfs_convert.sh DISK_IMG_PATH ROOTFS_CTF_DIR_PATH METADATA_PATH OUTPUT [OPTIONS]
+#
+# Options are passed to ctf_to_proto (see: `python3 ctf_to_proto -h`).
 #
 # Copyright 2025 Phoenix Systems
 # Author: Adam Greloch
 
 set -e
 
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+
 if [ "$#" -eq 0 ]; then
 	echo "Usage: ./$(basename "$0") DISK_IMG_PATH ROOTFS_CTF_DIR_PATH METADATA_PATH OUTPUT [OPTIONS]"
-	echo "Options:"
-	echo "  -t:  run perfetto in browser with local trace processing acceleration (may be useful for large traces)"
+	echo ""
 	echo "Example: ./$(basename "$0") ../../_boot/ia32-generic-qemu/hd0.disk /trace output.pftrace"
+	echo ""
+	echo "OPTIONS can be used to pass ctf_to_proto options:"
+	python3 "${SCRIPT_DIR}/ctf_to_proto" -h
 	exit 1
 fi
 
