@@ -19,12 +19,13 @@ def main():
     parser.add_argument("syscalls_path", help="path to list of syscalls")
     parser.add_argument("ctf_path", help="path to CTF folder to convert")
     parser.add_argument("output_path", help="path where to save the conversion result")
+    parser.add_argument("--add-debug-annotations", action="store_true", help="adds debug annotations to events (may slow down the conversion)")
 
     if len(sys.argv) == 1:
         parser.print_help()
     args = parser.parse_args(sys.argv[1:])
 
-    e = Emitter(args.syscalls_path)
+    e = Emitter(args.syscalls_path, args.add_debug_annotations)
 
     e.convert(args.ctf_path, args.output_path)
 

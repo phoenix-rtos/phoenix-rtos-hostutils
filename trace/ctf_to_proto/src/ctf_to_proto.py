@@ -14,7 +14,9 @@ import sys
 from enum import Enum
 
 from . import perfetto_trace_pb2
-from .perfetto_trace_pb2 import TrackEvent
+from .perfetto_trace_pb2 import TrackEvent, DebugAnnotation
+
+from typing import Iterator, Any
 
 
 class SyntheticEvents(Enum):
@@ -131,7 +133,7 @@ class Emitter:
 
     warn_unknown_threads = False
 
-    def __init__(self, syscalls_path):
+    def __init__(self, syscalls_path, add_debug_annotations=False):
         for synthetic, (begin, end) in prtos_synthetic_events.items():
             self.synthetic_begin[begin] = []
             self.synthetic_end[end] = []
@@ -142,6 +144,10 @@ class Emitter:
 
         with open(syscalls_path, "r") as f:
             self.prtos_syscalls = tuple(s.strip() for s in f.read().split(","))
+
+        self.add_debug_annotations = add_debug_annotations
+        if self.add_debug_annotations:
+            eprint("debug annotations enabled")
 
     @staticmethod
     def tid_or_kernel(event):
@@ -442,6 +448,26 @@ class Emitter:
             "ts": ts,
         }
 
+    def read_args_to_debug_annotations(
+        self, args: dict[str, Any]
+    ) -> Iterator[DebugAnnotation]:
+        for k, v in args.items():
+            ann = DebugAnnotation()
+            ann.name = k
+            v = lower(v)
+            if isinstance(v, bool):
+                ann.bool_value = v
+            elif isinstance(v, int):
+                ann.int_value = v
+            elif isinstance(v, float):
+                ann.double_value = v
+            elif isinstance(v, str):
+                ann.string_value = v
+            else:
+                eprint(f"WARN: unhandled annotation type: {v.__class__} - added as '?'")
+                ann.string_value = "?"
+            yield ann
+
     def emit_event(
         self,
         msg: bt2._EventMessageConst,
@@ -546,6 +572,8 @@ class Emitter:
         packet.track_event.type = phase
         packet.track_event.name = event_name
         packet.track_event.track_uuid = track_uuid
+        if self.add_debug_annotations:
+            packet.track_event.debug_annotations.extend(self.read_args_to_debug_annotations(args))
         packet.trusted_packet_sequence_id = PACKET_SEQ
 
         if flow_id:
