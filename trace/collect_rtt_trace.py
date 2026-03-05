@@ -20,11 +20,18 @@ import errno
 import time
 import subprocess
 
+from argparse import ArgumentParser
+
 RTT_PORT_BASE = 18023
 
 
 class TraceOverRTTCollector:
     cores = []
+
+    def __init__(self, skip_openocd_startup=False):
+        self.skip_openocd_startup = skip_openocd_startup
+        if self.skip_openocd_startup:
+            print("Skipping OpenOCD startup")
 
     def connect_sockets(self, rtt_port_base):
         retries = 5
@@ -141,8 +148,10 @@ class TraceOverRTTCollector:
             print("")
 
     def run(self, ocd_config, output_dir):
-        p = subprocess.Popen(["openocd", "-f", ocd_config])
-        print("OpenOCD started")
+        p = None
+        if not self.skip_openocd_startup:
+            p = subprocess.Popen(["openocd", "-f", ocd_config])
+            print("OpenOCD started")
         try:
             self.connect_sockets(RTT_PORT_BASE)
             self.open_channel_files(output_dir)
@@ -153,20 +162,29 @@ class TraceOverRTTCollector:
             finally:
                 self.close_channel_files()
         finally:
-            p.terminate()
-            print("OpenOCD stopped")
+            if p:
+                p.terminate()
+                print("OpenOCD stopped")
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"usage: {sys.argv[0]} OPENOCD_CONFIG OUTPUT_DIR")
-        sys.exit(1)
+    parser = ArgumentParser()
+    parser.add_argument("ocd_config", help="path to OpenOCD config")
+    parser.add_argument(
+        "output_dir", help="destination path where to save the captured CTF"
+    )
+    parser.add_argument(
+        "--skip-openocd-startup",
+        action="store_true",
+        help="skips the startup of OpenOCD (e.g. when it is externally started)",
+    )
 
-    ocd_config = sys.argv[1]
-    output_dir = sys.argv[2]
+    if len(sys.argv) == 1:
+        parser.print_help()
+    args = parser.parse_args(sys.argv[1:])
 
-    c = TraceOverRTTCollector()
-    c.run(ocd_config, output_dir)
+    c = TraceOverRTTCollector(args.skip_openocd_startup)
+    c.run(args.ocd_config, args.output_dir)
 
 
 if __name__ == "__main__":

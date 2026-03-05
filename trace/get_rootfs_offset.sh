@@ -13,13 +13,5 @@
 # Author: Adam Greloch
 
 set -e
-
 disk_path="${1?}"
-disk_name="$(basename "${disk_path}")"
-
-fdisk_output="$(fdisk -l "${disk_path}")"
-
-start_ofs="$(echo "${fdisk_output}" | grep "${disk_name}1" | awk \{'print $3'\})"
-sector_size="$(echo "${fdisk_output}" | grep "Sector size" | awk \{'print $7'\})"
-
-echo $((start_ofs * sector_size))
+parted -ms "${disk_path}" unit B print | grep '^1:' | cut -d: -f2 | sed 's/B$//'
