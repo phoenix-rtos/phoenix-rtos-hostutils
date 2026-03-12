@@ -20,20 +20,23 @@ import errno
 import time
 import subprocess
 
+from io import BufferedWriter
+from pathlib import Path
+
 from argparse import ArgumentParser
 
 RTT_PORT_BASE = 18023
 
 
 class TraceOverRTTCollector:
-    cores = []
+    cores: list[dict[str, socket.socket | BufferedWriter]] = []
 
-    def __init__(self, skip_openocd_startup=False):
+    def __init__(self, skip_openocd_startup: bool = False) -> None:
         self.skip_openocd_startup = skip_openocd_startup
         if self.skip_openocd_startup:
             print("Skipping OpenOCD startup")
 
-    def connect_sockets(self, rtt_port_base):
+    def connect_sockets(self, rtt_port_base: int) -> None:
         retries = 5
         while True:
             try:
@@ -47,11 +50,13 @@ class TraceOverRTTCollector:
 
                 rtt_port_base += 2
                 self.cores.append({"meta_sock": meta_sock, "events_sock": events_sock})
-            except (OSError) as e:
+            except OSError as e:
                 if e.errno == errno.ECONNREFUSED:
                     if len(self.cores) == 0:
                         if retries == 0:
-                            print("Unable to connect to any RTT channel socket. Is OpenOCD configured correctly?")
+                            print(
+                                "Unable to connect to any RTT channel socket. Is OpenOCD configured correctly?"
+                            )
                             raise
                         time.sleep(0.05)
                         retries -= 1
@@ -61,33 +66,33 @@ class TraceOverRTTCollector:
                 else:
                     raise
 
-    def open_channel_files(self, output_dir):
+    def open_channel_files(self, output_dir: Path) -> None:
         os.makedirs(output_dir, exist_ok=True)
         print(f"Saving traces to {os.path.realpath(output_dir)}")
 
-        for (i, core) in enumerate(self.cores):
-            meta_file = open(os.path.join(
-                output_dir, f"channel_meta{i}"), "wb")
-            events_file = open(os.path.join(
-                output_dir, f"channel_event{i}"), "wb")
+        for i, core in enumerate(self.cores):
+            meta_file = open(os.path.join(output_dir, f"channel_meta{i}"), "wb")
+            events_file = open(os.path.join(output_dir, f"channel_event{i}"), "wb")
             core["meta_file"] = meta_file
             core["events_file"] = events_file
 
-    def close_channel_files(self):
+    def close_channel_files(self) -> None:
         for core in self.cores:
             core["meta_file"].close()
             core["events_file"].close()
         print("Files closed")
 
-    wrote = dict()
+    wrote: dict[str, int] = dict()
     total = 0
 
-    def read_from_socket(self, conn, mask, file):
+    def read_from_socket(
+        self, conn: socket.socket, mask: int, file: BufferedWriter
+    ) -> None:
         BUF_SIZE = 1024
         while True:
             try:
                 data = conn.recv(BUF_SIZE)
-            except (OSError) as e:
+            except OSError as e:
                 if e.errno == errno.EAGAIN:
                     break
                 else:
@@ -99,27 +104,33 @@ class TraceOverRTTCollector:
                 self.wrote[file.name] += len(data)
                 self.total += len(data)
 
-    def init_stats(self):
+    def init_stats(self) -> None:
         for core in self.cores:
             self.wrote[core["meta_file"].name] = 0
             self.wrote[core["events_file"].name] = 0
 
-    def register_sockets(self):
+    def register_sockets(self) -> selectors.BaseSelector:
         sel = selectors.DefaultSelector()
         for core in self.cores:
-            sel.register(core["events_sock"], selectors.EVENT_READ,
-                         (self.read_from_socket, core["events_file"]))
-            sel.register(core["meta_sock"], selectors.EVENT_READ,
-                         (self.read_from_socket, core["meta_file"]))
+            sel.register(
+                core["events_sock"],
+                selectors.EVENT_READ,
+                (self.read_from_socket, core["events_file"]),
+            )
+            sel.register(
+                core["meta_sock"],
+                selectors.EVENT_READ,
+                (self.read_from_socket, core["meta_file"]),
+            )
         return sel
 
-    def poll(self, sel):
+    def poll(self, sel: selectors.BaseSelector) -> None:
         try:
             print("Ready to gather events. Do ^C when the trace has finished")
 
             last = time.time()
             last_total = self.total
-            rate_kbps = 0
+            rate_kbps = 0.
             status_printed = False
 
             while True:
@@ -130,8 +141,7 @@ class TraceOverRTTCollector:
 
                 now = time.time()
                 if now - last > 0.1:
-                    rate_kbps = ((self.total - last_total) /
-                                 (now - last)) / 1024
+                    rate_kbps = ((self.total - last_total) / (now - last)) / 1024
                     last = now
                     last_total = self.total
 
@@ -140,14 +150,13 @@ class TraceOverRTTCollector:
                             sys.stdout.write("\x1b[1A\x1b[2K")
 
                     print(f"Rate: {rate_kbps:.2f} KB/s")
-                    for (filename, w) in self.wrote.items():
-                        print(f"{os.path.basename(filename)}: {
-                              w / 1024:.2f} KB ")
+                    for filename, w in self.wrote.items():
+                        print(f"{os.path.basename(filename)}: {w / 1024:.2f} KB ")
                         status_printed = True
         except KeyboardInterrupt:
             print("")
 
-    def run(self, ocd_config, output_dir):
+    def run(self, ocd_config: Path, output_dir: Path) -> None:
         p = None
         if not self.skip_openocd_startup:
             p = subprocess.Popen(["openocd", "-f", ocd_config])
@@ -167,11 +176,13 @@ class TraceOverRTTCollector:
                 print("OpenOCD stopped")
 
 
-def main():
+def main() -> None:
     parser = ArgumentParser()
-    parser.add_argument("ocd_config", help="path to OpenOCD config")
+    parser.add_argument("ocd_config", type=Path, help="path to OpenOCD config")
     parser.add_argument(
-        "output_dir", help="destination path where to save the captured CTF"
+        "output_dir",
+        type=Path,
+        help="destination path where to save the captured CTF",
     )
     parser.add_argument(
         "--skip-openocd-startup",
