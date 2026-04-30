@@ -107,6 +107,7 @@ class Emitter:
     initial_metadata_emitted = False
 
     tid_to_events_track_uid: dict[Tid, Uid] = dict()
+    tid_to_events_locked_track_uid: dict[Tid, Uid] = dict()
     tid_to_sched_track_uid: dict[Tid, Uid] = dict()
     tid_to_prio_track_uid: dict[Tid, Uid] = dict()
 
@@ -208,9 +209,11 @@ class Emitter:
         uid = next_uid()
         sched_uid = next_uid()
         events_uid = next_uid()
+        events_locked_uid = next_uid()
         prio_uid = next_uid()
 
         self.tid_to_events_track_uid[tid] = events_uid
+        self.tid_to_events_locked_track_uid[tid] = events_locked_uid
         self.tid_to_sched_track_uid[tid] = sched_uid
         self.tid_to_prio_track_uid[tid] = prio_uid
 
@@ -244,16 +247,25 @@ class Emitter:
         root_packet.track_descriptor.uuid = uid
         root_packet.track_descriptor.thread.pid = pid
         root_packet.track_descriptor.thread.tid = tid
+        packets.append(root_packet)
 
-        sched_packet = TracePacket()
-        sched_packet.track_descriptor.uuid = sched_uid
-        sched_packet.track_descriptor.parent_uuid = uid
-        sched_packet.track_descriptor.name = "sched"
+        for (child_uid, child_name) in [
+            (sched_uid, "sched"),
+            (events_uid, "events"),
 
-        events_packet = TracePacket()
-        events_packet.track_descriptor.uuid = events_uid
-        events_packet.track_descriptor.parent_uuid = uid
-        events_packet.track_descriptor.name = "events"
+            # Intentionally named the same as "events" above - this is a track for
+            # LOCKED events. As they can potentially overlap with other events,
+            # if put on the same track, the UI will crop them as it doesn't
+            # support same-track overlapping. Naming the track the same causes
+            # it to be merged into the "events" track. Details:
+            # https://github.com/google/perfetto/issues/438
+            (events_locked_uid, "events")
+        ]:
+            packet = TracePacket()
+            packet.track_descriptor.uuid = child_uid
+            packet.track_descriptor.parent_uuid = uid
+            packet.track_descriptor.name = child_name
+            packets.append(packet)
 
         prio_packet = TracePacket()
         prio_packet.track_descriptor.uuid = prio_uid
@@ -262,8 +274,7 @@ class Emitter:
         )
         prio_packet.track_descriptor.name = "prio"
         prio_packet.track_descriptor.counter.unit_name = "prio"
-
-        packets += [root_packet, sched_packet, events_packet, prio_packet]
+        packets.append(prio_packet)
 
         self.tid_curr_prio[tid] = prio
 
@@ -543,6 +554,10 @@ class Emitter:
             case SyntheticEvents.LOCKED:
                 lock_name = self.get_lock_name(msg)
                 event_name = "locked:" + lock_name
+
+                assert tid != KERNEL_TID # if fails, interrupt/sched has locked a lock??
+                track_uuid = self.tid_to_events_locked_track_uid[tid]
+
                 if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
                     flow_id = int(args["lid"])
 
