@@ -40,6 +40,16 @@ prtos_synthetic_events = {
 }
 
 
+class TrackNames(Enum):
+    SCHED = "sched"
+    EVENTS = "events"
+
+    # Separate track(s) for LOCKED events, as they can potentially overlap with
+    # other events, if put on the same track, the UI will crop them as it
+    # doesn't support same-track overlapping. Details:
+    # https://github.com/google/perfetto/issues/438
+    LOCKED = "locked"
+
 def lower(x: Any) -> str | dict | bool | int | float:
     if isinstance(x, str) or isinstance(x, int) or isinstance(x, float):
         return x
@@ -106,9 +116,12 @@ class Emitter:
 
     initial_metadata_emitted = False
 
+    # TODO: rewrite to ThreadTrack class
     tid_to_events_track_uid: dict[Tid, Uid] = dict()
+    tid_to_events_locked_track_uid: dict[Tid, dict[LockId, Uid]] = dict()
     tid_to_sched_track_uid: dict[Tid, Uid] = dict()
     tid_to_prio_track_uid: dict[Tid, Uid] = dict()
+    tid_to_root_uid: dict[Tid, Uid] = dict()
 
     pid_to_uid: dict[Pid, Uid] = dict()
     pid_to_prio_uid: dict[Pid, Uid] = dict()
@@ -196,6 +209,24 @@ class Emitter:
         if len(self.current_trace.packet) >= BATCH_SIZE:
             self.flush_current_trace()
 
+    def get_lock_track(self, tid: Tid, lid: LockId) -> Uid:
+        if lid not in self.tid_to_events_locked_track_uid[tid]:
+            events_locked_uid = next_uid()
+            packet = TracePacket()
+            packet.track_descriptor.uuid = events_locked_uid
+            packet.track_descriptor.parent_uuid = self.tid_to_root_uid[tid]
+
+            # Keep the same name for each track so they get merged in the UI
+            # into one "locked" track
+            packet.track_descriptor.name = TrackNames.LOCKED.value
+
+            self.print_trace_packets([packet])
+
+            self.tid_to_events_locked_track_uid[tid][lid] = events_locked_uid
+
+        return self.tid_to_events_locked_track_uid[tid][lid]
+
+
     def add_new_thread(self, **kwargs: Any) -> None:
         kwargs = {**{"ts": 0}, **kwargs}
 
@@ -211,8 +242,10 @@ class Emitter:
         prio_uid = next_uid()
 
         self.tid_to_events_track_uid[tid] = events_uid
+        self.tid_to_events_locked_track_uid[tid] = dict()
         self.tid_to_sched_track_uid[tid] = sched_uid
         self.tid_to_prio_track_uid[tid] = prio_uid
+        self.tid_to_root_uid[tid] = uid
 
         self.ongoing_events[tid] = dict()
 
@@ -244,16 +277,17 @@ class Emitter:
         root_packet.track_descriptor.uuid = uid
         root_packet.track_descriptor.thread.pid = pid
         root_packet.track_descriptor.thread.tid = tid
+        packets.append(root_packet)
 
-        sched_packet = TracePacket()
-        sched_packet.track_descriptor.uuid = sched_uid
-        sched_packet.track_descriptor.parent_uuid = uid
-        sched_packet.track_descriptor.name = "sched"
-
-        events_packet = TracePacket()
-        events_packet.track_descriptor.uuid = events_uid
-        events_packet.track_descriptor.parent_uuid = uid
-        events_packet.track_descriptor.name = "events"
+        for (child_uid, child_name) in [
+            (sched_uid, TrackNames.SCHED),
+            (events_uid, TrackNames.EVENTS),
+        ]:
+            packet = TracePacket()
+            packet.track_descriptor.uuid = child_uid
+            packet.track_descriptor.parent_uuid = uid
+            packet.track_descriptor.name = child_name.value
+            packets.append(packet)
 
         prio_packet = TracePacket()
         prio_packet.track_descriptor.uuid = prio_uid
@@ -262,8 +296,7 @@ class Emitter:
         )
         prio_packet.track_descriptor.name = "prio"
         prio_packet.track_descriptor.counter.unit_name = "prio"
-
-        packets += [root_packet, sched_packet, events_packet, prio_packet]
+        packets.append(prio_packet)
 
         self.tid_curr_prio[tid] = prio
 
@@ -543,8 +576,14 @@ class Emitter:
             case SyntheticEvents.LOCKED:
                 lock_name = self.get_lock_name(msg)
                 event_name = "locked:" + lock_name
+
+                assert tid != KERNEL_TID, "unexpected lock event from interrupt/scheduler"
+
+                lid = int(args["lid"])
+                track_uuid = self.get_lock_track(tid, lid)
+
                 if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
-                    flow_id = int(args["lid"])
+                    flow_id = lid
 
                     # WORKAROUND: perfetto doesn't like IN_LOCK_SET END
                     # having the same ts as LOCKED BEGIN, resulting in
