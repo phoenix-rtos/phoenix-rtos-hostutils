@@ -525,6 +525,7 @@ class Emitter:
         tid = self.tid_or_kernel(event)
         ts = self.event_us(msg)
         track_uuid = None
+        correlation_id = None
         cpu = lower(event["cpu"])
         assert isinstance(cpu, int)
         update_cpu = False
@@ -572,14 +573,19 @@ class Emitter:
                 event_name = f"irq:{irq}"
             case SyntheticEvents.IN_LOCK_SET:
                 lock_name = self.get_lock_name(msg)
-                event_name = "lockSet:" + lock_name
+                lid = int(args["lid"])
+
+                event_name = "lockSet:" + lock_name + f" (0x{lid:08x})"
+                correlation_id = lid
             case SyntheticEvents.LOCKED:
                 lock_name = self.get_lock_name(msg)
-                event_name = "locked:" + lock_name
+                lid = int(args["lid"])
+
+                event_name = "locked:" + lock_name + f" (0x{lid:08x})"
+                correlation_id = lid
 
                 assert tid != KERNEL_TID, "unexpected lock event from interrupt/scheduler"
 
-                lid = int(args["lid"])
                 track_uuid = self.get_lock_track(tid, lid)
 
                 if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
@@ -629,6 +635,9 @@ class Emitter:
 
         if flow_id:
             packet.track_event.flow_ids.append(flow_id)
+
+        if correlation_id:
+            packet.track_event.correlation_id = correlation_id
 
         if phase == TrackEvent.Type.TYPE_SLICE_BEGIN:
             self.add_ongoing_event(tid, packet)
