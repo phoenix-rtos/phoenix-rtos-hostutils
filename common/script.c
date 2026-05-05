@@ -316,7 +316,7 @@ static int _script_parse_cmp(const void *k, const void *e)
 /* main loop of the psu script parser */
 int script_parse(script_t *s, int flags)
 {
-	script_funct_t *p;
+	const script_funct_t *p;
 
 	s->errstr = NULL;
 	s->flags = flags;
