@@ -536,23 +536,6 @@ class Emitter:
             self.update_thread_from_meta_args(tid, args, ts)
             return  # meta event
 
-        if name == "process_exec":
-            old_name = self.threads[tid]["name"]
-
-            self.update_thread_from_meta_args(tid, args, ts)
-
-            pid = args["pid"]
-            name = str(lower(args["name"]))
-            eprint(f"rename process (exec): '{old_name}' -> '{name}' {pid=}")
-
-            packet = TracePacket()
-            packet.track_descriptor.uuid = self.pid_to_uid[pid]
-            packet.track_descriptor.process.pid = pid
-            packet.track_descriptor.process.process_name = f"'{name}'"
-            self.print_trace_packets([packet])
-
-            return  # meta event
-
         if tid != KERNEL_TID and tid not in self.tid_emitted:
             t = self.get_thread(tid)
             self.add_new_thread(
@@ -561,6 +544,25 @@ class Emitter:
             event = self.gen_prio_change_packet(tid, self.tid_curr_prio[tid], ts)
             self.print_trace_packets([event])
             self.tid_emitted.add(tid)
+
+        if name == "process_exec":
+            old_name = self.threads[tid]["name"]
+
+            self.update_thread_from_meta_args(tid, args, ts)
+
+            pid = args["pid"]
+            name = str(lower(args["name"]))
+
+            assert pid in self.pid_to_uid
+
+            eprint(f"rename process (exec): '{old_name}' -> '{name}' {pid=}")
+            packet = TracePacket()
+            packet.track_descriptor.uuid = self.pid_to_uid[pid]
+            packet.track_descriptor.process.pid = pid
+            packet.track_descriptor.process.process_name = f"'{name}'"
+            self.print_trace_packets([packet])
+
+            return  # meta event
 
         event_name = name.value if isinstance(name, SyntheticEvents) else name
 
