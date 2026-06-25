@@ -14,6 +14,7 @@
  */
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -83,7 +84,7 @@ static inline void set_write_file_cmd(unsigned char *b, uint32_t addr, uint8_t f
 }
 
 
-static inline void set_dcd_write_cmd(unsigned char *b, uint32_t addr, uint32_t size)
+static inline void set_write_dcd_cmd(unsigned char *b, uint32_t addr, uint32_t size)
 {
 	SET_CMD_TYPE(b, 0x0a);
 	SET_ADDR(b, addr);
@@ -146,17 +147,22 @@ static int sdp_writeRegister(hid_device *dev, uint32_t addr, uint8_t format, uin
 }
 
 
-static int sdp_writeFile(hid_device *dev, uint32_t addr, uint8_t format, void *data, size_t size)
+static int sdp_writeFile(hid_device *dev, uint32_t addr, uint8_t format, void *data, size_t size, bool dcd)
 {
 	int rc;
 	size_t n;
 	ssize_t offset = 0;
 	unsigned char b[BUF_SIZE] = { 0 };
-	const uint32_t pattern = 0x88888888;
+	const uint32_t pattern = dcd ? 0x128A8A12 : 0x88888888;
 
 	/* Send write command */
 	b[0] = 1;
-	set_write_file_cmd(b + 1, addr, format, size);
+	if (dcd) {
+		set_write_dcd_cmd(b + 1, addr, size);
+	}
+	else {
+		set_write_file_cmd(b + 1, addr, format, size);
+	}
 
 	if ((rc = hid_write(dev, b, CMD_SIZE)) < 0) {
 		fprintf(stderr, "Failed to send write_file command (%d)\n", rc);
@@ -197,7 +203,7 @@ static int sdp_writeFile(hid_device *dev, uint32_t addr, uint8_t format, void *d
 		return SCRIPT_ERROR;
 	}
 
-	fprintf(stderr, " - File has been written correctly.\n");
+	fprintf(stderr, " - %s has been written correctly.\n", dcd ? " DCD" : "File");
 
 	return SCRIPT_OK;
 }
@@ -479,10 +485,7 @@ static int get_buffer(script_t *s, int type, script_blob_t str, script_blob_t *b
 		return SCRIPT_ERROR;
 	}
 
-	if (s->flags & SCRIPT_F_DRYRUN) {
-		close_buffer(type, blob);
-	}
-	else {
+	if ((s->flags & SCRIPT_F_DRYRUN) == 0) {
 		fprintf(stderr, " - Sending to the device: %.*s\n", (int)(str.end - str.ptr), str.ptr);
 	}
 
@@ -630,12 +633,12 @@ static int err_status_cmd(script_t *s)
 }
 
 
-static int write_file_cmd(script_t *s)
+static int write_file_or_dcd(script_t *s, bool dcd)
 {
 	int type, res;
 	script_blob_t str;
 	script_blob_t blob = SCRIPT_BLOB_EMPTY;
-	long int addr = 0, format = 0, offset = 0, size = 0;
+	long int addr = 0, format = 0, offsetArg = 0, sizeArg = 0;
 	hid_device *dev = *(hid_device **)s->arg;
 
 	if (!(s->next.str.end - s->next.str.ptr == 1 && (*s->next.str.ptr == 'F' || *s->next.str.ptr == 'S'))) {
@@ -663,16 +666,21 @@ static int write_file_cmd(script_t *s)
 		return SCRIPT_ERROR;
 	}
 
-	if (script_expect_opt(s, script_tok_integer, "Optional <format> value was expected") == SCRIPT_OK) {
-		format = s->token.num;
+	if (dcd) {
+		format = 0;
 	}
+	else {
+		if (script_expect_opt(s, script_tok_integer, "Optional <format> value was expected") == SCRIPT_OK) {
+			format = s->token.num;
+		}
 
-	if (s->errstr) {
-		return SCRIPT_ERROR;
+		if (s->errstr) {
+			return SCRIPT_ERROR;
+		}
 	}
 
 	if (script_expect_opt(s, script_tok_integer, "Optional <offset> value was expected") == SCRIPT_OK) {
-		offset = s->token.num;
+		offsetArg = s->token.num;
 	}
 
 	if (s->errstr) {
@@ -680,7 +688,11 @@ static int write_file_cmd(script_t *s)
 	}
 
 	if (script_expect_opt(s, script_tok_integer, "Optional <size> value was expected") == SCRIPT_OK) {
-		size = s->token.num;
+		sizeArg = s->token.num;
+	}
+
+	if (sizeArg < 0 || offsetArg < 0) {
+		s->errstr = "Size and offset must be >= 0";
 	}
 
 	if (s->errstr) {
@@ -691,20 +703,52 @@ static int write_file_cmd(script_t *s)
 		return SCRIPT_ERROR;
 	}
 
-	if (s->flags & SCRIPT_F_DRYRUN)
-		return SCRIPT_OK;
+	unsigned long int offset = offsetArg;
+	unsigned long int sizeBlob = blob.end - blob.ptr;
+	if (offset > sizeBlob) {
+		s->errstr = "Offset is out of bounds of the binary";
+		close_buffer(type, &blob);
+		return SCRIPT_ERROR;
+	}
 
-	if (size) {
-		size = MIN(size, blob.end - blob.ptr);
+	void *data = blob.ptr + offset;
+	sizeBlob -= offset;
+	unsigned long size = (sizeArg == 0) ? sizeBlob : MIN((unsigned long)sizeArg, sizeBlob);
+
+	if (dcd) {
+		uint32_t dcdHeader;
+		if (size < sizeof(dcdHeader)) {
+			s->errstr = "Binary too small to contain DCD\n";
+			close_buffer(type, &blob);
+			return SCRIPT_ERROR;
+		}
+
+		memcpy(&dcdHeader, data, sizeof(dcdHeader));
+		dcdHeader = ntohl(dcdHeader);
+		if (((dcdHeader >> 24) & 0xff) != 0xd2) {
+			s->errstr = "Invalid DCD header in binary\n";
+			close_buffer(type, &blob);
+			return SCRIPT_ERROR;
+		}
+
+		uint32_t dcdSize = (dcdHeader >> 8) & 0xffff;
+		if (dcdSize > size) {
+			s->errstr = "DCD binary is incomplete\n";
+			close_buffer(type, &blob);
+			return SCRIPT_ERROR;
+		}
+
+		size = dcdSize;
+	}
+
+	if (s->flags & SCRIPT_F_DRYRUN) {
+		res = SCRIPT_OK;
 	}
 	else {
-		size = blob.end - blob.ptr;
-	}
-
-	res = SCRIPT_ERROR;
-
-	if (dev) {
-		res = sdp_writeFile(dev, addr, format, blob.ptr + offset, size);
+		res = SCRIPT_ERROR;
+		if (dev) {
+			res = sdp_writeFile(dev, addr, format, data, size, dcd);
+		}
 	}
 
 	close_buffer(type, &blob);
@@ -716,6 +760,18 @@ static int write_file_cmd(script_t *s)
 	s->errstr = "Device not available";
 
 	return SCRIPT_ERROR;
+}
+
+
+static int write_file_cmd(script_t *s)
+{
+	return write_file_or_dcd(s, false);
+}
+
+
+static int write_dcd_cmd(script_t *s)
+{
+	return write_file_or_dcd(s, true);
 }
 
 
@@ -745,13 +801,13 @@ static int load_image_cmd(script_t *s)
 	}
 
 	if (s->flags & SCRIPT_F_DRYRUN) {
-		return SCRIPT_OK;
+		res = SCRIPT_OK;
 	}
-
-	res = SCRIPT_ERROR;
-
-	if (dev) {
-		res = mcuboot_loadImage(dev, blob.ptr, blob.end - blob.ptr);
+	else {
+		res = SCRIPT_ERROR;
+		if (dev) {
+			res = mcuboot_loadImage(dev, blob.ptr, blob.end - blob.ptr);
+		}
 	}
 
 	close_buffer('F', &blob);
@@ -803,6 +859,7 @@ static const script_funct_t funcs[] = {
 	{ "PROMPT", not_implemented_cmd },
 	{ "REBOOT", not_implemented_cmd },
 	{ "WAIT", wait_cmd },
+	{ "WRITE_DCD", write_dcd_cmd },
 	{ "WRITE_FILE", write_file_cmd },
 	{ "WRITE_REGISTER", write_reg_cmd },
 	{ NULL, NULL }
