@@ -194,6 +194,7 @@ int main(int argc, char *argv[])
 			if (i < 8) {
 				mode[i] = PIPE;
 			}
+			/* fallthrough */
 		case 'p':
 			if (i == 8) {
 				fprintf(stderr, "Too many ttys for open!\n");
