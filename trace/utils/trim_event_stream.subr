@@ -26,7 +26,7 @@ trap cleanup EXIT
 # trim_event_stream(trace_dir_to_fix)
 trim_event_stream() {
 	MAX_TRIM_ITERS=50 # should be more than max CTF packet size
-	MAX_START_TRIM_ITERS=l5
+	MAX_START_TRIM_ITERS=15
 
 	local trace_dir_to_fix="${1?no input path}"
 
