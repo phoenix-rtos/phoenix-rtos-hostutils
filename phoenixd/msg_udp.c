@@ -80,6 +80,7 @@ int udp_open(char *node, uint port)
 
 	if ((result = getaddrinfo(node, NULL, NULL, &servAddr)) != 0) {
 		fprintf(stderr, "Error opening %s:%d: %s\n", node, port, gai_strerror(result));
+		close(fd);
 		return result;
 	}
 
@@ -97,8 +98,10 @@ int udp_open(char *node, uint port)
 	bcast_in.sin_port = htons(PHFS_UDPPORT);
 	bcast_in.sin_family = addr_in.sin_family;
 
-	if (result < 0)
+	if (result < 0) {
+		close(fd);
 		return ERR_SERIAL_INIT;
+	}
 
 	if (!fork())
 	{
