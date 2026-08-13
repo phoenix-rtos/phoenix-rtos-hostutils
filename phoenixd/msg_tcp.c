@@ -51,6 +51,7 @@ int tcp_open(char *addrstr, unsigned int port)
 
 	if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
 		perror("Connect failed");
+		close(sock);
 		return -1;
 	}
 
