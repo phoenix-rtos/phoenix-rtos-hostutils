@@ -81,7 +81,7 @@ int udp_open(char *node, uint port)
 	if ((result = getaddrinfo(node, NULL, NULL, &servAddr)) != 0) {
 		fprintf(stderr, "Error opening %s:%d: %s\n", node, port, gai_strerror(result));
 		close(fd);
-		return result;
+		return ERR_SERIAL_INIT;
 	}
 
 	addr_in = *(struct sockaddr_in *)servAddr->ai_addr;
