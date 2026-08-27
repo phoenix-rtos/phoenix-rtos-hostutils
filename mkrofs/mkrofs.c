@@ -26,46 +26,21 @@
 #include <unistd.h>
 #include <libgen.h>
 
+#include <tinyaes/aes.h>
+#include <tinyaes/cmac.h>
+
+#include <rofs_layout.h>
 
 #define LOG_prefix    "rofs: "
 #define LOG(fmt, ...) fprintf(stdout, LOG_prefix fmt "\n", ##__VA_ARGS__)
 #define ERR(fmt, ...) fprintf(stderr, LOG_prefix fmt "\n", ##__VA_ARGS__)
 
-
 #define ROFS_ALIGNUP(s, sz) (((s) + (sz) - 1) & ~((sz) - 1))
-
-#define ROFS_SIGNATURE     ((uint8_t[4]) { 'R', 'O', 'F', 'S' })
-#define ROFS_HDR_SIGNATURE 0
-#define ROFS_HDR_CHECKSUM  4
-#define ROFS_HDR_IMAGESIZE 8
-#define ROFS_HDR_INDEXOFFS 16
-#define ROFS_HDR_NODECOUNT 24
-#define ROFS_HEADER_SIZE   64
 
 enum endianness {
 	endian_little,
 	endian_big
 };
-
-struct rofs_node {
-	uint64_t timestamp;
-	uint32_t parentId;
-	uint32_t id;
-	uint32_t mode;
-	uint32_t reserved0;
-	int32_t uid;
-	int32_t gid;
-	uint32_t offset;
-	uint32_t reserved1;
-	uint32_t size;
-	uint32_t reserved2;
-	char name[207];
-	uint8_t zero; /* contains '\0' */
-} __attribute__((packed));
-
-
-_Static_assert(sizeof(struct rofs_node) == 256, "'struct rofs_node' needs to be 256 bytes");
-
 
 static struct {
 	uint8_t buf[4096];
@@ -75,6 +50,8 @@ static struct {
 	size_t depthMax;
 	size_t depth;
 	enum endianness endianness;
+	uint8_t key[AES_KEYLEN];
+	bool use_aes;
 } common = { 0 };
 
 
@@ -109,6 +86,37 @@ static void calc_crc32mem(const uint8_t *buf, uint32_t len, uint32_t *crc)
 		}
 	}
 	*crc = rcrc;
+}
+
+
+static int calc_AESCMACfile(FILE *img, uint32_t len, uint8_t mac[AES_BLOCKLEN])
+{
+	size_t todo = len;
+
+	struct CMAC_ctx ctx;
+	CMAC_init_ctx(&ctx, common.key);
+
+	while (todo > 0) {
+		size_t chunksz = (todo > sizeof(common.buf)) ? sizeof(common.buf) : todo;
+		size_t rlen = fread(common.buf, 1, chunksz, img);
+
+		if (chunksz != rlen) {
+			if (ferror(img) != 0) {
+				ERR("fread: %s", strerror(errno));
+			}
+			else {
+				ERR("fread: unexpected EOF");
+			}
+			return -1;
+		}
+
+		CMAC_append(&ctx, common.buf, rlen);
+		todo -= rlen;
+	}
+
+	CMAC_calculate(&ctx, mac);
+
+	return 0;
 }
 
 
@@ -169,6 +177,7 @@ static void write_u64(uint8_t *buf, uint64_t value)
 static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t nodeCnt)
 {
 	uint8_t hdr[ROFS_HEADER_SIZE];
+	uint8_t mac[AES_BLOCKLEN];
 
 	uint32_t crc = ~0;
 	int ret = -1;
@@ -178,6 +187,20 @@ static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t 
 	write_u32(&hdr[ROFS_HDR_IMAGESIZE], imgSize);
 	write_u32(&hdr[ROFS_HDR_INDEXOFFS], idxOffs);
 	write_u32(&hdr[ROFS_HDR_NODECOUNT], nodeCnt);
+	write_u32(&hdr[ROFS_HDR_ENCRYPTION], common.use_aes ? rofs_encryption_aes : rofs_encryption_none);
+
+	if (common.use_aes) {
+		if (fseek(img, sizeof(hdr), SEEK_SET) < 0) {
+			return -1;
+		}
+
+		if (calc_AESCMACfile(img, imgSize - sizeof(hdr), mac) < 0) {
+			return -1;
+		}
+
+		memcpy(&hdr[ROFS_HDR_CRYPT_SIG], mac, AES_BLOCKLEN);
+	}
+
 	calc_crc32mem(hdr + ROFS_HDR_IMAGESIZE, sizeof(hdr) - ROFS_HDR_IMAGESIZE, &crc);
 
 	do {
@@ -206,6 +229,16 @@ static int write_header(FILE *img, uint32_t idxOffs, uint32_t imgSize, uint32_t 
 	LOG("image size: %u", imgSize);
 	LOG("node index: %u", idxOffs);
 	LOG("CRC32: %08X", crc);
+
+	if (common.use_aes) {
+		char buf[2 * AES_BLOCKLEN + 1];
+		size_t ofs = 0;
+		for (int i = 0; i < AES_BLOCKLEN; i++) {
+			ofs += snprintf(buf + ofs, 3, "%.2x", mac[i]);
+		}
+		buf[ofs] = '\0';
+		LOG("AES-CMAC: %s", buf);
+	}
 
 	return ret;
 }
@@ -251,6 +284,27 @@ struct rofs_node *node_alloc(void)
 	}
 
 	return memset(&common.nodes[common.nodesCount++], 0, sizeof(struct rofs_node));
+}
+
+
+static inline void constructIV(uint8_t *iv, const struct rofs_node *node)
+{
+	/* TODO: ESSIV? */
+	memset(iv, 0, AES_BLOCKLEN);
+	write_u32(iv, node->id);
+	write_u32(iv + 4, node->offset);
+	write_u32(iv + 8, node->uid);
+}
+
+
+void rofs_xcrypt(void *buff, size_t bufflen, const uint8_t *key, const struct rofs_node *node)
+{
+	struct AES_ctx ctx;
+	uint8_t iv[AES_BLOCKLEN];
+
+	constructIV(iv, node);
+	AES_init_ctx_iv(&ctx, key, iv);
+	AES_CTR_xcrypt_buffer(&ctx, buff, bufflen);
 }
 
 
@@ -368,6 +422,9 @@ static int processDir(FILE *img, const char *path, uint32_t parentId, uint32_t *
 				if (bytes == 0) {
 					break;
 				}
+				if (common.use_aes) {
+					rofs_xcrypt(common.buf, bytes, common.key, node);
+				}
 				if (fwrite(common.buf, 1, bytes, img) != bytes) {
 					ret = -1;
 					break;
@@ -428,15 +485,16 @@ static int write_nodes_tree(FILE *img)
 static void usage(const char *name)
 {
 	printf(
-		"Usage: %s [-p depth] [-l/-b] -d <dst> -s <src>\n"
-		"\tCreate Read-Only File System image\n"
-		"Arguments:\n"
-		"\t-p <depth> - Optional recursion MAX_DEPTH, default=128\n"
-		"\t-l         - Little endian FS, default\n"
-		"\t-b         - Big endian FS\n"
-		"\t-d <dst>   - Destination file system image file name (required)\n"
-		"\t-s <src>   - Source root directory to be placed into dst (required)\n",
-		name);
+			"Usage: %s [-p depth] [-l/-b] -d <dst> -s <src>\n"
+			"\tCreate Read-Only File System image\n"
+			"Arguments:\n"
+			"\t-p <depth> - Optional recursion MAX_DEPTH, default=128\n"
+			"\t-l         - Little endian FS, default\n"
+			"\t-b         - Big endian FS\n"
+			"\t-d <dst>   - Destination file system image file name (required)\n"
+			"\t-s <src>   - Source root directory to be placed into dst (required)\n"
+			"\t-k <key>   - AES %d-bit key (as hex string)\n",
+			name, AES_KEYLEN * 8);
 }
 
 
@@ -462,7 +520,7 @@ int main(int argc, char *argv[])
 	int opt;
 	bool endianSet = false;
 	do {
-		opt = getopt(argc, argv, "p:d:s:lb");
+		opt = getopt(argc, argv, "p:d:s:lbk:");
 		switch (opt) {
 			case 'p': {
 				char *end;
@@ -474,7 +532,22 @@ int main(int argc, char *argv[])
 				}
 				break;
 			}
-
+			case 'k': {
+				size_t len = strnlen(optarg, 2 * AES_KEYLEN + 1);
+				if (len != 2 * AES_KEYLEN) {
+					ERR("Invalid key len: %zu", len);
+					return EXIT_FAILURE;
+				}
+				len /= 2;
+				for (size_t i = 0; i < len; i++) {
+					if (sscanf(&optarg[2 * i], "%2hhx", &common.key[i]) != 1) {
+						ERR("bad hex in key at position %zu", 2 * i);
+						return EXIT_FAILURE;
+					}
+				}
+				common.use_aes = true;
+				break;
+			}
 			case 'l':
 				if (endianSet) {
 					ERR("Endianness already set");
