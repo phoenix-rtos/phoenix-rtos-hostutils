@@ -1,5 +1,5 @@
 #!/usr/bin/env -S octave --no-gui -qf
-## KM 4.2 measurement campaign analysis (report: section 3.1.6, stage 7) from hilsim dump CSV files (-o).
+## KM 4.2 measurement campaign analysis (report: section 3.1.6, Annex 10 stage 8) from hilsim dump CSV files (-o).
 ##
 ## Usage: analiza_km42.m --input <dir> --output <dir> [--hil_latency <us>] [--reference <file>]
 ##
@@ -10,13 +10,18 @@
 ##   km42-kalibracja.txt      uart_latency loopback output (optional): calibration checks and default T_hil
 ##   km42-kalibracja-dut.csv  hilsim -p echo dump (optional): calibration check of the HIL->DUT->HIL path
 ##
-## Processing time t_i = recv_ns - sent_ns - T_hil, T_hil is --hil_latency, or the average full-packet round trip
-## from km42-kalibracja.txt if not given. Responses with negative t_i are ignored, if there are several responses with
-## the same idx, only the first one (in dump order) with non-negative t_i is used.
-## Row i is correct (c_i = 1) if the dump has a response with the same idx, received before the next row was due
-## (recv - sent < period) and all its commands differ from the reference by less than delta = 1e-4. A late answer to
-## an earlier row is recorded under the idx of the current row, so it is incorrect unless its value matches.
-## C = sum(c_i) / N, N - number of sent rows ('# sent:' metadata, number of reference rows if missing).
+## Definitions follow the report section 3.1.1.
+## Processing time t_i = T_out,i - T_in,i - T_hil = recv_ns - sent_ns - T_hil, T_hil is --hil_latency, or the average
+## full-packet round trip from km42-kalibracja.txt (report section 3.1.5, step 3) if not given. Responses with negative
+## t_i are ignored, if there are several responses with the same idx, only the first one (in dump order) with
+## non-negative t_i is used. A sent row without such a response (no response) gets c_i = 0 and t_i equal to the nominal
+## period T_in,i+1 - T_in,i (median send interval of the reference).
+## Row i is correct (c_i = 1) if the dump has a response with the same idx, not late and with all commands (K output
+## channels) within |y_i,k - y_ref,i,k| < delta = 1e-4. A response is late (timeout) if
+## recv - sent >= T_in,i+1 - T_in,i, i.e. T_hil is not subtracted, which is stricter than t_i >= T_in,i+1 - T_in,i
+## in the report; a late response keeps its measured t_i. A late answer to an earlier row is recorded under the idx of
+## the current row, so it is incorrect unless its value matches the reference of the current row.
+## C^S = sum(c_i) / N, N - number of sent rows ('# sent:' metadata, number of reference rows if missing).
 ##
 ## Written to the --output directory:
 ##   km42-wyniki.txt          tables of the report section 3.2 (also printed to stdout)
@@ -109,6 +114,15 @@ function d = filter_dump(d, hilLatency)
 endfunction
 
 
+## Processing time t_i [us] of every sent row idx: recv - sent - hilLatency of the response from the filtered dump d,
+## the nominal period [ns] for rows without it.
+function t = proc_times(idx, d, hilLatency, period)
+  t = repmat(period / 1000, numel(idx), 1);
+  [found, loc] = ismember(idx, d.idx);
+  t(found) = d.lat(loc(found)) - hilLatency;
+endfunction
+
+
 ## Reads uart_latency output: struct with sent, ok, timeouts, mismatches, wire (theoretical time) and full-packet
 ## round trip min, max, avg [us], empty if the file does not exist.
 function k = load_calib(path)
@@ -181,9 +195,9 @@ function [code, loc] = correctness(run, ref, delta)
   [found, loc] = ismember(ref.idx, run.idx);
   i = find(found);
   j = loc(found);
-  # response after the next row was sent (t_i >= T_in,i+1 - T_in,i)
+  # response after the next row was sent (timeout, report section 3.1.1), T_hil is not subtracted here
   late = (run.recv(j) - run.sent(j)) >= run.period;
-  # dump has 4 decimal places, difference of 1e-4 may be parsed slightly below delta
+  # dump values are rounded (%.9g), a difference of exactly 1e-4 may be parsed slightly below delta
   match = all(abs(run.cmd(j, :) - ref.cmd(i, :)) < delta - 1e-9, 2);
   code(i(late)) = 2;
   code(i(!late & !match)) = 3;
@@ -265,7 +279,7 @@ if (!exist(outDir, "dir") && !mkdir(outDir))
   exit(1);
 endif
 
-## calibration (stage 5)
+## calibration (report section 3.1.5, step 3)
 calib = load_calib(fullfile(inDir, "km42-kalibracja.txt"));
 calibDutPath = fullfile(inDir, "km42-kalibracja-dut.csv");
 calibDut = [];
@@ -285,7 +299,7 @@ ref = load_dump(refPath);
 N = numel(ref.idx);
 
 files = dir(fullfile(inDir, "km42-*-run*.csv"));
-runs = struct("scen", {}, "r", {}, "file", {}, "d", {}, "t", {}, "stats", {}, "code", {}, "loc", {}, "C", {}, "nSent", {}, "nSentAssumed", {}, "invalid", {});
+runs = struct("scen", {}, "r", {}, "file", {}, "d", {}, "tIdx", {}, "t", {}, "stats", {}, "code", {}, "loc", {}, "C", {}, "nSent", {}, "nSentAssumed", {}, "invalid", {});
 for f = files'
   tok = regexp(f.name, '^km42-(\w+)-run(\d+)\.csv$', "tokens", "once");
   if (isempty(tok))
@@ -300,8 +314,6 @@ for f = files'
   run.r = str2double(tok{2});
   run.file = f.name;
   run.d = filter_dump(load_dump(fullfile(inDir, f.name)), hilLatency);
-  run.t = run.d.lat - hilLatency;
-  run.stats = lat_stats(run.t);
   run.invalid = {};
 
   if (size(run.d.cmd, 2) != size(ref.cmd, 2))
@@ -321,6 +333,11 @@ for f = files'
     run.nSent = run.d.nSent;
   endif
   run.C = sum(run.code == 0) / run.nSent;
+
+  # t_i of every sent row, hilsim sends the input rows in order, so the sent rows are the first nSent reference rows
+  run.tIdx = ref.idx(1:min(run.nSent, N));
+  run.t = proc_times(run.tIdx, run.d, hilLatency, ref.period);
+  run.stats = lat_stats(run.t);
 
   # validity criteria (Table 7) checkable from the HIL registers, W3-W9 and W11 require DUT logs
   if (run.nSent < N_MIN)
@@ -396,7 +413,7 @@ fprintf(stats, "scenario,run,valid,sent,responses,t_max_us,t_min_us,t_mean_us,t_
 for k = 1:numel(runs)
   s = runs(k).stats;
   fprintf(stats, "%s,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.6f\n", SCENARIOS{runs(k).scen}, runs(k).r, valid(k),
-      runs(k).nSent, s.n, s.max, s.min, s.mean, s.median, s.std, s.q95, s.q99, sum(runs(k).code == 0), runs(k).C);
+      runs(k).nSent, numel(runs(k).d.idx), s.max, s.min, s.mean, s.median, s.std, s.q95, s.q99, sum(runs(k).code == 0), runs(k).C);
 endfor
 fclose(stats);
 
@@ -416,7 +433,7 @@ for scen = 1:numel(SCENARIOS)
   emit(fid, "\n");
   tab = {
     "Liczba porcji danych", @(r) sprintf("%d%s", r.nSent, repmat("*", 1, r.nSentAssumed));
-    "Liczba odpowiedzi", @(r) sprintf("%d", r.stats.n);
+    "Liczba odpowiedzi", @(r) sprintf("%d", numel(r.d.idx));
     "T_max [µs]", @(r) fmt(r.stats.max);
     "T_min [µs]", @(r) fmt(r.stats.min);
     "T_śr [µs]", @(r) fmt(r.stats.mean);
@@ -453,7 +470,8 @@ for k = 1:numel(runs)
 endfor
 fclose(mis);
 
-## parameters R and P for all pairs of valid nominal and partitioned repetitions, the worst one is taken
+## parameters R and P for all pairs (9 for 3 repetitions) of valid nominal and partitioned repetitions, the worst one is
+## taken (report section 3.1.5, step 7)
 nom = find(valid & [runs.scen] == 1);
 part = find(valid & [runs.scen] == 2);
 nopart = find(valid & [runs.scen] == 3);
@@ -547,7 +565,8 @@ fclose(fid);
 ## plots (Figures 3 and 4), valid runs only
 COLORS = [0.00 0.45 0.74; 0.85 0.33 0.10; 0.47 0.67 0.19];
 STYLES = {"-", "--", ":", "-."};
-MARKERS = {".", "x", "+", "o"};
+# repetition colors of the t_i plots
+REP_COLORS = [0.00 0.45 0.74; 0.85 0.33 0.10; 0.47 0.67 0.19; 0.49 0.18 0.56; 0.93 0.69 0.13; 0.30 0.75 0.93];
 # hidden figures are rendered by the qt toolkit (octave --no-gui), octave-cli fltk cannot print them
 try
   h = figure("visible", "off", "position", [0 0 1000 600]);
@@ -562,7 +581,12 @@ try
   grid on;
   xlabel("Czas przetwarzania t_i [µs]");
   ylabel("Dystrybuanta empiryczna");
-  legend(names, "location", "southeast");
+  # legend locations have no center, place it in the middle of the axes, between the scenario 1-2 curves on the left
+  # and the scenario 3 jump at the period on the right
+  lg = legend(names);
+  axPos = get(gca, "position");
+  lgPos = get(lg, "position");
+  set(lg, "position", [axPos(1) + (axPos(3) - lgPos(3)) / 2, axPos(2) + (axPos(4) - lgPos(4)) / 2, lgPos(3), lgPos(4)]);
   print(h, fullfile(outDir, "km42-ecdf.png"), "-dpng", "-r150");
   close(h);
 
@@ -572,7 +596,7 @@ try
     hold on;
     names = {};
     for k = find(valid & [runs.scen] == scen)
-      plot(runs(k).d.idx, runs(k).t, MARKERS{mod(runs(k).r - 1, numel(MARKERS)) + 1}, "color", COLORS(scen, :) * (0.4 + 0.6 / runs(k).r), "markersize", 3);
+      plot(runs(k).tIdx, runs(k).t, "+", "color", REP_COLORS(mod(runs(k).r - 1, rows(REP_COLORS)) + 1, :), "markersize", 3);
       names{end + 1} = sprintf("powtórzenie %d", runs(k).r);
     endfor
     hold off;
